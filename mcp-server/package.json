@@ -1,0 +1,23 @@
+{
+  "name": "spatialos-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for spatial voice commands",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && node dist/index.js",
+    "start": "node dist/index.js",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "ws": "^8.18.0",
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^6.0.0"
+  }
+}

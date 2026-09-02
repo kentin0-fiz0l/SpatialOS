@@ -1,0 +1,14 @@
+{
+  "name": "spatialos-wifi-companion",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WiFi positioning companion app for SpatialOS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "node-wifi": "^2.0.15"
+  }
+}
