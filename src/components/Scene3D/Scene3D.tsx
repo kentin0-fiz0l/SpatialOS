@@ -6,12 +6,13 @@
 
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, PerspectiveCamera } from '@react-three/drei';
-import { Physics } from '@react-three/rapier';
+import { Physics, RigidBody } from '@react-three/rapier';
 import { useVisibleObjects } from '../../stores/spatialStore';
 import { useHandInteraction } from '../../hooks/useHandInteraction';
 import { useCameraPositionTracking } from '../../hooks/useCameraPositionTracking';
 import SpatialObject from './SpatialObject';
 import HandCursor from './HandCursor';
+import AIResponseBubble from '../UI/AIResponseBubble';
 
 /**
  * Scene content (must be inside Canvas)
@@ -43,11 +44,13 @@ function SceneContent() {
 
       {/* Physics world */}
       <Physics gravity={[0, -9.81, 0]}>
-        {/* Ground plane */}
-        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-          <planeGeometry args={[50, 50]} />
-          <meshStandardMaterial color="#1a1a1a" />
-        </mesh>
+        {/* Ground plane with physics collider */}
+        <RigidBody type="fixed" colliders="cuboid">
+          <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+            <planeGeometry args={[50, 50]} />
+            <meshStandardMaterial color="#1a1a1a" />
+          </mesh>
+        </RigidBody>
 
         {/* Render spatial objects */}
         {objects.map((obj) => (
@@ -57,7 +60,12 @@ function SceneContent() {
         {/* Hand cursors */}
         <HandCursor hand="right" />
         <HandCursor hand="left" />
+
+        {/* AI Response Bubble (rendered outside physics for UI layer) */}
       </Physics>
+
+      {/* AI Response Bubble - floats in 3D space, independent of physics */}
+      <AIResponseBubble />
 
       {/* Grid helper */}
       <Grid

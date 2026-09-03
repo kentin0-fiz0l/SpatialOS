@@ -2,10 +2,13 @@
  * Hand Interaction Hook
  *
  * Manages grab/drag physics for spatial objects using hand gestures
+ * Now includes AI query triggers via fist gesture
  */
 import { useEffect, useRef } from 'react';
 import { useLeftHand, useRightHand } from '../stores/handStore';
 import { useSpatialStore } from '../stores/spatialStore';
+import { useAIStore } from '../stores/aiStore';
+import { ollamaService } from '../services/ollamaService';
 import type { Vector3 } from '../types/spatial.types';
 
 interface PositionSample {
@@ -51,10 +54,10 @@ export function useHandInteraction() {
   const grabbedObjects = useRef<Map<string, GrabbedObject>>(new Map());
   const leftHand = useLeftHand();
   const rightHand = useRightHand();
-  const spatialStore = useSpatialStore();
 
   useEffect(() => {
-    const GRAB_DISTANCE = 0.3; // Max distance to grab (meters)
+    const GRAB_DISTANCE = 1.0; // Max distance to grab (meters) - increased for easier testing
+    const AI_QUERY_RADIUS = 2.0; // Search radius for AI context (meters)
 
     // Create handState object for processing
     const handState = { leftHand, rightHand };
@@ -74,8 +77,9 @@ export function useHandInteraction() {
         return;
       }
 
-      // Check if hand is pinching
+      // Check gesture type
       if (hand.gesture === 'pinch') {
+        // PINCH: Grab/hold objects
         // Check if already holding an object
         const heldObject = Array.from(grabbedObjects.current.entries()).find(
           ([_, grabbed]) => grabbed.hand === handSide
@@ -88,12 +92,16 @@ export function useHandInteraction() {
         } else {
           // Try to grab nearest object
           const nearestObject = findNearestObject(hand.position, GRAB_DISTANCE);
+          console.log(`[HandInteraction] Pinch detected on ${handSide} hand at`, hand.position, 'nearest:', nearestObject);
           if (nearestObject) {
             grabObject(nearestObject.id, handSide, hand.position, nearestObject.position);
           }
         }
+      } else if (hand.gesture === 'fist') {
+        // FIST: Trigger AI query about nearby spatial context
+        triggerAIQuery(hand.position, AI_QUERY_RADIUS);
       } else {
-        // Released pinch - drop any held objects
+        // OPEN/OTHER: Released pinch - drop any held objects
         grabbedObjects.current.forEach((grabbed, objectId) => {
           if (grabbed.hand === handSide) {
             releaseObject(objectId, grabbed);
@@ -102,7 +110,7 @@ export function useHandInteraction() {
         });
       }
     });
-  }, [leftHand, rightHand, spatialStore]);
+  }, [leftHand, rightHand]); // Removed spatialStore from dependencies
 
   /**
    * Find the nearest object to a hand position
@@ -111,7 +119,7 @@ export function useHandInteraction() {
     handPos: Vector3,
     maxDistance: number
   ): { id: string; position: Vector3; distance: number } | null {
-    const objects = spatialStore.getAllObjects();
+    const objects = useSpatialStore.getState().getAllObjects();
     let nearest: { id: string; position: Vector3; distance: number } | null = null;
 
     objects.forEach((obj) => {
@@ -160,7 +168,7 @@ export function useHandInteraction() {
     const newPosition = addVectors(handPos, grabbed.offset);
     const now = Date.now();
 
-    spatialStore.updateObject(objectId, {
+    useSpatialStore.getState().updateObject(objectId, {
       position: newPosition,
     });
 
@@ -204,16 +212,66 @@ export function useHandInteraction() {
     console.log(`[HandInteraction] Released object ${objectId}, velocity:`, velocity, `speed: ${speed.toFixed(2)} m/s`);
 
     // Apply throw velocity to object (SpatialObject will read this and apply impulse)
-    spatialStore.updateObject(objectId, {
+    useSpatialStore.getState().updateObject(objectId, {
       throwVelocity: velocity,
     } as any);
 
     // Clear throw velocity after a frame so it only applies once
     setTimeout(() => {
-      spatialStore.updateObject(objectId, {
+      useSpatialStore.getState().updateObject(objectId, {
         throwVelocity: undefined,
       } as any);
     }, 100);
+  }
+
+  /**
+   * Find all objects within a radius
+   */
+  function findNearbyObjects(position: Vector3, radius: number) {
+    const objects = useSpatialStore.getState().getAllObjects();
+    const nearby: Array<{ id: string; type: string; position: Vector3; color?: string; distance: number }> = [];
+
+    objects.forEach((obj) => {
+      const dist = distance3D(position, obj.position);
+      if (dist <= radius) {
+        nearby.push({
+          id: obj.id,
+          type: obj.type,
+          position: obj.position,
+          color: (obj as any).color, // Color may not exist on all spatial objects
+          distance: dist,
+        });
+      }
+    });
+
+    // Sort by distance (closest first)
+    nearby.sort((a, b) => a.distance - b.distance);
+
+    return nearby;
+  }
+
+  /**
+   * Trigger AI query about spatial context
+   */
+  function triggerAIQuery(handPos: Vector3, radius: number) {
+    const aiStore = useAIStore.getState();
+
+    // Don't trigger if already loading
+    if (aiStore.isLoading) {
+      console.log('[HandInteraction] AI already loading, skipping trigger');
+      return;
+    }
+
+    // Find nearby objects
+    const nearbyObjects = findNearbyObjects(handPos, radius);
+
+    console.log(`[HandInteraction] Fist gesture detected! Hand at:`, handPos, `Nearby objects:`, nearbyObjects.length);
+
+    // Build spatial prompt
+    const prompt = ollamaService.buildSpatialPrompt(handPos, nearbyObjects);
+
+    // Query AI
+    aiStore.queryAI(prompt, handPos);
   }
 
   return {
