@@ -2,10 +2,11 @@
  * Ollama Service
  *
  * HTTP client for local Ollama AI inference
- * Builds context-aware prompts from spatial data
+ * Builds context-aware prompts from spatial data + spatial memories
  */
 
 import type { Vector3 } from '../types/spatial.types';
+import type { SpatialMemory } from '../stores/spatialMemoryStore';
 
 interface OllamaGenerateRequest {
   model: string;
@@ -84,32 +85,52 @@ class OllamaService {
   }
 
   /**
-   * Build a spatial-aware prompt from hand position and nearby objects
+   * Build a spatial-aware prompt from hand position, nearby objects, and spatial memories
    */
-  buildSpatialPrompt(handPos: Vector3, nearbyObjects: SpatialObject[]): string {
-    // If no objects nearby, return a general observation
-    if (nearbyObjects.length === 0) {
-      return `You are an AI assistant integrated into a 3D spatial computing environment. The user made a fist gesture at position [${handPos[0].toFixed(2)}, ${handPos[1].toFixed(2)}, ${handPos[2].toFixed(2)}] but there are no objects nearby. Respond briefly acknowledging the empty space.`;
-    }
+  buildSpatialPrompt(handPos: Vector3, nearbyObjects: SpatialObject[], nearbyMemories: SpatialMemory[] = []): string {
 
-    // Build context with nearby objects
+    // Build object descriptions
     const objectDescriptions = nearbyObjects
       .slice(0, 3) // Limit to 3 closest objects
       .map((obj) => {
         const distance = this.calculateDistance(handPos, obj.position);
         const colorDesc = obj.color ? `${obj.color} ` : '';
-        return `- A ${colorDesc}${obj.type} at [${obj.position[0].toFixed(2)}, ${obj.position[1].toFixed(2)}, ${obj.position[2].toFixed(2)}], ${distance.toFixed(2)} meters away`;
+        return `- A ${colorDesc}${obj.type} at [${obj.position[0].toFixed(2)}, ${obj.position[1].toFixed(2)}, ${obj.position[2].toFixed(2)}], ${distance.toFixed(2)}m away`;
       })
       .join('\n');
 
-    const prompt = `You are an AI assistant integrated into a 3D spatial computing environment.
+    // Build memory descriptions
+    const memoryDescriptions = nearbyMemories
+      .slice(0, 3) // Limit to 3 closest memories
+      .map((memory) => {
+        const distance = this.calculateDistance(handPos, memory.position);
+        const desc = memory.description ? ` (${memory.description})` : '';
+        return `- "${memory.label}" at [${memory.position[0].toFixed(2)}, ${memory.position[1].toFixed(2)}, ${memory.position[2].toFixed(2)}], ${distance.toFixed(2)}m away${desc}`;
+      })
+      .join('\n');
+
+    // Build the prompt with both objects and memories
+    let prompt = `You are an AI assistant integrated into a 3D spatial computing environment with spatial memory.
 
 The user made a fist gesture at position [${handPos[0].toFixed(2)}, ${handPos[1].toFixed(2)}, ${handPos[2].toFixed(2)}].
+`;
 
-Nearby objects:
-${objectDescriptions}
+    // Add objects section if any exist
+    if (objectDescriptions) {
+      prompt += `\nNearby objects:\n${objectDescriptions}\n`;
+    }
 
-Respond in 1-2 sentences describing what you observe in this spatial area. Be natural and conversational.`;
+    // Add memories section if any exist
+    if (memoryDescriptions) {
+      prompt += `\nSpatial memories (locations you've been told to remember):\n${memoryDescriptions}\n`;
+    }
+
+    // Handle case where nothing is nearby
+    if (!objectDescriptions && !memoryDescriptions) {
+      prompt += `\nThere are no objects or spatial memories nearby.\n`;
+    }
+
+    prompt += `\nRespond in 1-2 sentences describing what you observe in this spatial area. Be natural and conversational. If there are spatial memories, reference them by name (e.g., "near your desk").`;
 
     return prompt;
   }

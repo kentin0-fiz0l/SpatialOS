@@ -2,11 +2,13 @@
  * AI Store
  *
  * Manages AI conversation state and responses
+ * Now with spatial memory command detection
  */
 
 import { create } from 'zustand';
 import type { Vector3 } from '../types/spatial.types';
 import { ollamaService } from '../services/ollamaService';
+import { useSpatialMemoryStore } from './spatialMemoryStore';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -30,6 +32,7 @@ interface AIStoreState {
 
   // Actions
   queryAI: (prompt: string, position: Vector3) => Promise<void>;
+  rememberLocation: (position: Vector3, label: string, description?: string) => void;
   dismissResponse: () => void;
   clearHistory: () => void;
   setError: (error: string | null) => void;
@@ -102,6 +105,39 @@ export const useAIStore = create<AIStoreState>((set, get) => ({
         lastError: errorMessage,
       });
     }
+  },
+
+  /**
+   * Remember a location with a semantic label
+   */
+  rememberLocation: (position: Vector3, label: string, description?: string) => {
+    console.log('[AIStore] Remembering location:', label, 'at', position);
+
+    // Add memory to spatial memory store
+    const memory = useSpatialMemoryStore.getState().addMemory(position, label, description);
+
+    // Show confirmation as AI response
+    set({
+      currentResponse: {
+        text: `✓ Remembered "${label}" at this location`,
+        position,
+        timestamp: Date.now(),
+      },
+    });
+
+    // Add to conversation history
+    const state = get();
+    const confirmationMessage: ConversationMessage = {
+      role: 'assistant',
+      content: `Spatial memory created: "${label}" at [${position[0].toFixed(2)}, ${position[1].toFixed(2)}, ${position[2].toFixed(2)}]`,
+      timestamp: Date.now(),
+    };
+
+    set({
+      conversationHistory: [...state.conversationHistory, confirmationMessage],
+    });
+
+    return memory;
   },
 
   /**

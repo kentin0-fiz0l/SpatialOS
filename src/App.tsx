@@ -3,6 +3,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import StatusBar from './components/UI/StatusBar';
 import VoiceIndicator from './components/UI/VoiceIndicator';
 import ErrorOverlay from './components/UI/ErrorOverlay';
+import TestHarness from './components/UI/TestHarness';
+import SpatialMemoryPanel from './components/UI/SpatialMemoryPanel';
 import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
@@ -174,6 +176,19 @@ function App() {
     };
   }, []);
 
+  // Keyboard shortcut for debug mode (D key)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'd' || e.key === 'D') {
+        const currentDebugMode = useSpatialStore.getState().debugMode;
+        useSpatialStore.getState().setDebugMode(!currentDebugMode);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   return (
     <ErrorBoundary>
       <div className="w-screen h-screen bg-gray-900 text-white relative">
@@ -263,35 +278,12 @@ function App() {
             import('./services/a2aService').then(({ a2aService }) => {
               import('./stores/spatialStore').then(({ useSpatialStore }) => {
                 const store = useSpatialStore.getState();
-
-                // Clear old objects first
-                const objects = store.getAllObjects();
-                objects.forEach(obj => {
-                  store.deleteObject(obj.id);
-                  // Broadcast deletion if A2A is connected
-                  if (a2aService.isConnected()) {
-                    a2aService.broadcastObjectDeleted(obj.id);
-                  }
-                });
-
                 // Create new objects at hand-reachable positions
                 // Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
-                const note = store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6], createdBy: 'hand' });
-                const timer = store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6], createdBy: 'hand' });
-                const widget = store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6], createdBy: 'hand' });
-
-                // Broadcast creations if A2A is connected
-                if (a2aService.isConnected()) {
-                  const noteObj = store.getObject(note);
-                  const timerObj = store.getObject(timer);
-                  const widgetObj = store.getObject(widget);
-
-                  if (noteObj) a2aService.broadcastObjectCreated(noteObj);
-                  if (timerObj) a2aService.broadcastObjectCreated(timerObj);
-                  if (widgetObj) a2aService.broadcastObjectCreated(widgetObj);
-                }
+                store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6], createdBy: 'hand' });
+                store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6], createdBy: 'hand' });
+                store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6], createdBy: 'hand' });
               });
-            });
           }}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
         >
@@ -304,6 +296,12 @@ function App() {
 
       {/* Error Overlay - shows error messages */}
       <ErrorOverlay />
+
+      {/* Test Harness for automated physics testing */}
+      <TestHarness />
+
+      {/* Spatial Memory Panel */}
+      <SpatialMemoryPanel />
     </div>
     </ErrorBoundary>
   );

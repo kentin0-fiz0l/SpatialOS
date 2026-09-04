@@ -38,6 +38,7 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
   // State
   objects: new Map<string, SpatialObject>(),
   currentRoom: 'default',
+  debugMode: false,
 
   // Add object
   addObject: (obj) => {
@@ -160,6 +161,12 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
   setCurrentRoom: (room) => {
     set({ currentRoom: room });
     console.log(`[SpatialStore] Current room: ${room}`);
+  },
+
+  // Set debug mode
+  setDebugMode: (enabled) => {
+    set({ debugMode: enabled });
+    console.log(`[SpatialStore] Debug mode: ${enabled ? 'enabled' : 'disabled'}`);
   },
 }));
 

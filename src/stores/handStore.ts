@@ -30,11 +30,13 @@ interface HandStoreState {
   // Camera/tracking state
   cameraActive: boolean;
   trackingActive: boolean;
+  simulatorActive: boolean;
 
   // Actions
   updateHand: (hand: 'left' | 'right', state: HandState | null) => void;
   setCameraActive: (active: boolean) => void;
   setTrackingActive: (active: boolean) => void;
+  setSimulatorActive: (active: boolean) => void;
   clearHands: () => void;
 }
 
@@ -56,6 +58,7 @@ export const useHandStore = create<HandStoreState>((set) => ({
   rightHand: null,
   cameraActive: false,
   trackingActive: false,
+  simulatorActive: false,
 
   updateHand: (hand, state) => {
     set({
@@ -69,6 +72,10 @@ export const useHandStore = create<HandStoreState>((set) => ({
 
   setTrackingActive: (active) => {
     set({ trackingActive: active });
+  },
+
+  setSimulatorActive: (active) => {
+    set({ simulatorActive: active });
   },
 
   clearHands: () => {
