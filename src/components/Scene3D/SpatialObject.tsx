@@ -12,6 +12,7 @@ import { TextureLoader } from 'three';
 import type { SpatialObject as SpatialObjectType } from '../../types/spatial.types';
 import type { Mesh } from 'three';
 import type { Vector3 } from '../../types/spatial.types';
+import { useSmoothTransform } from '../../hooks/useSmoothTransform';
 
 interface Props {
   object: SpatialObjectType;
@@ -43,6 +44,13 @@ function NoteObject({ object, meshRef }: { object: SpatialObjectType; meshRef: a
   const [x, y, z] = object.position;
   const rigidBodyRef = useRef<RapierRigidBody>(null);
 
+  // Smooth scale and rotation transitions
+  const { smoothScale, smoothRotation } = useSmoothTransform(
+    object.scale,
+    object.rotation,
+    0.15 // Smoothing speed (lower = smoother but slower)
+  );
+
   // Apply throw velocity as impulse
   useEffect(() => {
     const throwVelocity = (object as any).throwVelocity as Vector3 | undefined;
@@ -67,7 +75,7 @@ function NoteObject({ object, meshRef }: { object: SpatialObjectType; meshRef: a
       gravityScale={0.5}
       restitution={0.3}
     >
-      <group>
+      <group scale={smoothScale} quaternion={smoothRotation}>
         {/* Background panel */}
         <mesh ref={meshRef} castShadow>
           <boxGeometry args={[2, 1, 0.1]} />
@@ -115,6 +123,13 @@ function TimerObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const [tick, setTick] = useState(0);
   const isPaused = content.paused || false;
+
+  // Smooth scale and rotation transitions
+  const { smoothScale, smoothRotation } = useSmoothTransform(
+    object.scale,
+    object.rotation,
+    0.15
+  );
 
   // Force update every second for countdown, pulse when complete
   useFrame((state) => {
@@ -207,7 +222,7 @@ function TimerObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
       gravityScale={0.5}
       restitution={0.3}
     >
-      <group>
+      <group scale={smoothScale} quaternion={smoothRotation}>
         {/* Background circle */}
         <mesh ref={meshRef} castShadow>
           <cylinderGeometry args={[0.8, 0.8, 0.1, 32]} />
@@ -291,6 +306,13 @@ function ImageObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [texture, setTexture] = useState<any>(null);
 
+  // Smooth scale and rotation transitions
+  const { smoothScale, smoothRotation } = useSmoothTransform(
+    object.scale,
+    object.rotation,
+    0.15
+  );
+
   // Load image texture
   useEffect(() => {
     const loader = new TextureLoader();
@@ -335,7 +357,7 @@ function ImageObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
       gravityScale={0.5}
       restitution={0.3}
     >
-      <group>
+      <group scale={smoothScale} quaternion={smoothRotation}>
         {/* Frame background */}
         <mesh ref={meshRef} castShadow position={[0, 0, -0.02]}>
           <boxGeometry args={[displayWidth + 0.1, displayHeight * aspectRatio + 0.1, 0.05]} />
@@ -382,6 +404,13 @@ function WidgetObject({ object, meshRef }: { object: SpatialObjectType; meshRef:
   const [x, y, z] = object.position;
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Smooth scale and rotation transitions
+  const { smoothScale, smoothRotation } = useSmoothTransform(
+    object.scale,
+    object.rotation,
+    0.15
+  );
 
   // Update clock every second
   useFrame(() => {
@@ -487,7 +516,7 @@ function WidgetObject({ object, meshRef }: { object: SpatialObjectType; meshRef:
       gravityScale={0.5}
       restitution={0.3}
     >
-      <group>
+      <group scale={smoothScale} quaternion={smoothRotation}>
         {/* Widget background */}
         <mesh ref={meshRef} castShadow>
           <boxGeometry args={[1.5, 1, 0.1]} />
@@ -527,6 +556,13 @@ function DefaultObject({ object, meshRef }: { object: SpatialObjectType; meshRef
   const [x, y, z] = object.position;
   const rigidBodyRef = useRef<RapierRigidBody>(null);
 
+  // Smooth scale and rotation transitions
+  const { smoothScale, smoothRotation } = useSmoothTransform(
+    object.scale,
+    object.rotation,
+    0.15
+  );
+
   // Apply throw velocity as impulse
   useEffect(() => {
     const throwVelocity = (object as any).throwVelocity as Vector3 | undefined;
@@ -548,16 +584,18 @@ function DefaultObject({ object, meshRef }: { object: SpatialObjectType; meshRef
       colliders="ball"
       restitution={0.5}
     >
-      <mesh ref={meshRef} castShadow>
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial
-          color="#888888"
-          roughness={0.5}
-          metalness={0.2}
-          emissive={object.highlighted ? "#888888" : "#000000"}
-          emissiveIntensity={object.highlighted ? 0.5 : 0}
-        />
-      </mesh>
+      <group scale={smoothScale} quaternion={smoothRotation}>
+        <mesh ref={meshRef} castShadow>
+          <sphereGeometry args={[0.5, 32, 32]} />
+          <meshStandardMaterial
+            color="#888888"
+            roughness={0.5}
+            metalness={0.2}
+            emissive={object.highlighted ? "#888888" : "#000000"}
+            emissiveIntensity={object.highlighted ? 0.5 : 0}
+          />
+        </mesh>
+      </group>
     </RigidBody>
   );
 }
