@@ -22,8 +22,10 @@ interface GrabbedObject {
   offset: Vector3; // Offset from hand position to object center
   positionHistory: PositionSample[]; // Last 5 positions for velocity calc
   twoHanded?: boolean; // Is this object being grabbed with both hands?
-  initialScale?: Vector3; // Object's scale when two-handed grab started
-  initialDistance?: number; // Distance between hands when two-handed grab started
+  initialScale?: Vector3; // Object's scale when grab started
+  initialDistance?: number; // Distance between hands when two-handed grab started (two-handed mode)
+  initialPinchDistance?: number; // Pinch distance when grabbed (single-hand scaling)
+  initialRotation?: number; // Hand rotation when grabbed (single-hand rotation)
 }
 
 /**
@@ -91,13 +93,13 @@ export function useHandInteraction() {
         if (heldObject) {
           // Update held object position
           const [objectId, grabbed] = heldObject as [string, GrabbedObject];
-          updateGrabbedObject(objectId, grabbed, hand.position);
+          updateGrabbedObject(objectId, grabbed, hand.position, hand.pinchDistance, hand.rotation);
         } else {
           // Try to grab nearest object
           const nearestObject = findNearestObject(hand.position, GRAB_DISTANCE);
           console.log(`[HandInteraction] Pinch detected on ${handSide} hand at`, hand.position, 'nearest:', nearestObject);
           if (nearestObject) {
-            grabObject(nearestObject.id, handSide, hand.position, nearestObject.position);
+            grabObject(nearestObject.id, handSide, hand.position, nearestObject.position, hand.pinchDistance, hand.rotation);
           }
         }
       } else if (hand.gesture === 'fist') {
@@ -185,30 +187,67 @@ export function useHandInteraction() {
     objectId: string,
     hand: 'left' | 'right',
     handPos: Vector3,
-    objectPos: Vector3
+    objectPos: Vector3,
+    pinchDistance?: number,
+    rotation?: number
   ) {
     const offset = subtractVectors(objectPos, handPos);
     const now = Date.now();
+
+    // Get current object state for initial scale
+    const obj = useSpatialStore.getState().getAllObjects().find(o => o.id === objectId);
 
     grabbedObjects.current.set(objectId, {
       id: objectId,
       hand,
       offset,
       positionHistory: [{ position: handPos, timestamp: now }],
+      initialScale: obj?.scale || [1, 1, 1],
+      initialPinchDistance: pinchDistance,
+      initialRotation: rotation,
     });
 
     console.log(`[HandInteraction] Grabbed object ${objectId} with ${hand} hand`);
   }
 
   /**
-   * Update grabbed object position
+   * Update grabbed object position, scale, and rotation
    */
-  function updateGrabbedObject(objectId: string, grabbed: GrabbedObject, handPos: Vector3) {
+  function updateGrabbedObject(
+    objectId: string,
+    grabbed: GrabbedObject,
+    handPos: Vector3,
+    currentPinchDistance?: number,
+    currentRotation?: number
+  ) {
     const newPosition = addVectors(handPos, grabbed.offset);
     const now = Date.now();
 
+    // Calculate scale based on pinch distance change
+    let newScale: Vector3 | undefined;
+    if (grabbed.initialScale && grabbed.initialPinchDistance && currentPinchDistance) {
+      const scaleMultiplier = currentPinchDistance / grabbed.initialPinchDistance;
+      newScale = [
+        grabbed.initialScale[0] * scaleMultiplier,
+        grabbed.initialScale[1] * scaleMultiplier,
+        grabbed.initialScale[2] * scaleMultiplier,
+      ];
+    }
+
+    // Calculate rotation based on hand rotation change
+    let newRotation: [number, number, number, number] | undefined;
+    if (grabbed.initialRotation !== undefined && currentRotation !== undefined) {
+      const rotationDelta = currentRotation - grabbed.initialRotation;
+      // Convert to quaternion for Y-axis rotation: [0, sin(θ/2), 0, cos(θ/2)]
+      const halfAngle = rotationDelta / 2;
+      newRotation = [0, Math.sin(halfAngle), 0, Math.cos(halfAngle)];
+    }
+
+    // Update object with new position, scale, and rotation
     useSpatialStore.getState().updateObject(objectId, {
       position: newPosition,
+      ...(newScale && { scale: newScale }),
+      ...(newRotation && { rotation: newRotation }),
     });
 
     // Track position history for velocity calculation (keep last 5 samples)
