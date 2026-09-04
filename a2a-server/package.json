@@ -1,0 +1,27 @@
+{
+  "name": "@spatialos/a2a-server",
+  "version": "1.0.0",
+  "description": "Minimal A2A discovery server for agent coordination",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "keywords": [
+    "a2a",
+    "discovery",
+    "agent-coordination"
+  ],
+  "author": "jkino.ji@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

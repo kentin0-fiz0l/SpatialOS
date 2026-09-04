@@ -1,0 +1,29 @@
+{
+  "name": "@spatialos/spatial-memory",
+  "version": "1.0.0",
+  "description": "AI-powered spatial memory and pattern learning agent",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "keywords": [
+    "a2a",
+    "spatial-computing",
+    "ai",
+    "memory",
+    "ollama"
+  ],
+  "author": "jkino.ji@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

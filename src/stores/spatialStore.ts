@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { SpatialObject, SpatialStoreState } from '../types/spatial.types';
 import { saveToLocalStorage, loadFromLocalStorage } from '../utils/persistence';
+import { a2aService } from '../services/a2aService';
 
 // Default position: 2 meters in front of camera, 1.5m high
 const DEFAULT_POSITION: [number, number, number] = [0, 1.5, -2];
@@ -66,6 +67,10 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
     });
 
     console.log(`[SpatialStore] Added object: ${newObject.type} (${id})`);
+
+    // Broadcast to other users
+    broadcastObjectAdd(newObject);
+
     return id;
   },
 
@@ -89,6 +94,9 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
     });
 
     console.log(`[SpatialStore] Updated object: ${id}`);
+
+    // Broadcast to other users
+    broadcastObjectUpdate(id, updates);
   },
 
   // Delete object
@@ -109,6 +117,9 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
     });
 
     console.log(`[SpatialStore] Deleted object: ${id}`);
+
+    // Broadcast to other users
+    broadcastObjectDelete(id);
   },
 
   // Get single object
@@ -170,11 +181,110 @@ export const useSpatialStore = create<SpatialStoreState>((set, get) => ({
   },
 }));
 
+// Track if we're processing a remote update (prevents broadcast loops)
+let isProcessingRemote = false;
+
 /**
  * Initialize store on app load
  */
 export function initializeSpatialStore() {
   useSpatialStore.getState().loadFromDisk();
+  initializeMultiUserSync();
+}
+
+/**
+ * Initialize multi-user synchronization via A2A
+ */
+function initializeMultiUserSync() {
+  const store = useSpatialStore.getState();
+
+  // Listen for object-add messages from other users
+  a2aService.onMessage('object-add', (message: any) => {
+    console.log('[SpatialStore] Received remote object-add:', message.payload);
+
+    isProcessingRemote = true;
+    try {
+      const { object } = message.payload;
+      // Add object without broadcasting (it came from remote)
+      const newObjects = new Map(store.objects);
+      newObjects.set(object.id, object);
+      useSpatialStore.setState({ objects: newObjects });
+    } finally {
+      isProcessingRemote = false;
+    }
+  });
+
+  // Listen for object-update messages
+  a2aService.onMessage('object-update', (message: any) => {
+    console.log('[SpatialStore] Received remote object-update:', message.payload);
+
+    isProcessingRemote = true;
+    try {
+      const { id, updates } = message.payload;
+      const obj = store.objects.get(id);
+      if (obj) {
+        const updatedObj = { ...obj, ...updates };
+        const newObjects = new Map(store.objects);
+        newObjects.set(id, updatedObj);
+        useSpatialStore.setState({ objects: newObjects });
+      }
+    } finally {
+      isProcessingRemote = false;
+    }
+  });
+
+  // Listen for object-delete messages
+  a2aService.onMessage('object-delete', (message: any) => {
+    console.log('[SpatialStore] Received remote object-delete:', message.payload);
+
+    isProcessingRemote = true;
+    try {
+      const { id } = message.payload;
+      const newObjects = new Map(store.objects);
+      newObjects.delete(id);
+      useSpatialStore.setState({ objects: newObjects });
+    } finally {
+      isProcessingRemote = false;
+    }
+  });
+
+  console.log('[SpatialStore] Multi-user sync initialized');
+}
+
+/**
+ * Broadcast object addition to other users
+ */
+function broadcastObjectAdd(object: SpatialObject) {
+  if (isProcessingRemote || !a2aService.isConnected()) return;
+
+  a2aService.sendMessage({
+    type: 'object-add',
+    payload: { object },
+  });
+}
+
+/**
+ * Broadcast object update to other users
+ */
+function broadcastObjectUpdate(id: string, updates: Partial<SpatialObject>) {
+  if (isProcessingRemote || !a2aService.isConnected()) return;
+
+  a2aService.sendMessage({
+    type: 'object-update',
+    payload: { id, updates },
+  });
+}
+
+/**
+ * Broadcast object deletion to other users
+ */
+function broadcastObjectDelete(id: string) {
+  if (isProcessingRemote || !a2aService.isConnected()) return;
+
+  a2aService.sendMessage({
+    type: 'object-delete',
+    payload: { id },
+  });
 }
 
 /**

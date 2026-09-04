@@ -19,25 +19,37 @@ export default function SpatialMemoryPanel() {
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleRememberSpot = () => {
     // Reset form and show it
     setLabel('');
     setDescription('');
+    setEditingId(null);
     setShowForm(true);
   };
 
   const handleSubmitMemory = () => {
     if (!label.trim()) return;
 
-    const hand = rightHand?.visible ? rightHand : leftHand?.visible ? leftHand : null;
-    const position = hand?.position || [0, 1, 0];
+    if (editingId) {
+      // Update existing memory
+      useSpatialMemoryStore.getState().updateMemory(editingId, {
+        label: label.trim(),
+        description: description.trim() || undefined,
+      });
+      setEditingId(null);
+    } else {
+      // Create new memory
+      const hand = rightHand?.visible ? rightHand : leftHand?.visible ? leftHand : null;
+      const position = hand?.position || [0, 1, 0];
 
-    useAIStore.getState().rememberLocation(
-      position,
-      label.trim(),
-      description.trim() || undefined
-    );
+      useAIStore.getState().rememberLocation(
+        position,
+        label.trim(),
+        description.trim() || undefined
+      );
+    }
 
     // Reset and close form
     setLabel('');
@@ -48,6 +60,7 @@ export default function SpatialMemoryPanel() {
   const handleCancelForm = () => {
     setLabel('');
     setDescription('');
+    setEditingId(null);
     setShowForm(false);
   };
 
@@ -64,6 +77,17 @@ export default function SpatialMemoryPanel() {
     setShowConfirmClear(false);
   };
 
+  const handleEditMemory = (memory: any) => {
+    setEditingId(memory.id);
+    setLabel(memory.label);
+    setDescription(memory.description || '');
+    setShowForm(true);
+  };
+
+  const handleDeleteMemory = (memoryId: string) => {
+    useSpatialMemoryStore.getState().removeMemory(memoryId);
+  };
+
   return (
     <>
     <div className="absolute bottom-4 right-4 z-10">
@@ -78,7 +102,7 @@ export default function SpatialMemoryPanel() {
             <p className="text-gray-500 text-[10px] italic">No memories yet</p>
           ) : (
             allMemories.map((memory) => (
-              <div key={memory.id} className="bg-gray-800/50 rounded p-2">
+              <div key={memory.id} className="bg-gray-800/50 rounded p-2 group relative">
                 <div className="font-medium text-white text-[10px]">"{memory.label}"</div>
                 <div className="text-gray-400 text-[9px]">
                   [{memory.position[0].toFixed(1)}, {memory.position[1].toFixed(1)}, {memory.position[2].toFixed(1)}]
@@ -86,6 +110,24 @@ export default function SpatialMemoryPanel() {
                 {memory.description && (
                   <div className="text-gray-500 text-[9px] mt-0.5">{memory.description}</div>
                 )}
+
+                {/* Edit/Delete buttons - show on hover */}
+                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleEditMemory(memory)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 rounded text-[9px]"
+                    title="Edit"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMemory(memory.id)}
+                    className="bg-red-600 hover:bg-red-700 text-white px-1.5 py-0.5 rounded text-[9px]"
+                    title="Delete"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -113,7 +155,9 @@ export default function SpatialMemoryPanel() {
     {showForm && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
         <div className="bg-gray-800 rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl border border-gray-700">
-          <h3 className="text-lg font-semibold text-white mb-3">Remember Location</h3>
+          <h3 className="text-lg font-semibold text-white mb-3">
+            {editingId ? 'Edit Memory' : 'Remember Location'}
+          </h3>
 
           <div className="space-y-3">
             <div>
@@ -160,7 +204,7 @@ export default function SpatialMemoryPanel() {
               disabled={!label.trim()}
               className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-2 rounded text-sm font-semibold transition-colors"
             >
-              Remember
+              {editingId ? 'Update' : 'Remember'}
             </button>
           </div>
         </div>

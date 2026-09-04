@@ -1,0 +1,28 @@
+{
+  "name": "@spatialos/scene-sync",
+  "version": "1.0.0",
+  "description": "Authoritative state management agent for SpatialOS multi-user scenarios",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "keywords": [
+    "a2a",
+    "spatial-computing",
+    "state-sync",
+    "conflict-resolution"
+  ],
+  "author": "jkino.ji@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
