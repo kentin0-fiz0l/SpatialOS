@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { useLeftHand, useRightHand } from '../stores/handStore';
 import { useSpatialStore } from '../stores/spatialStore';
 import { useAIStore } from '../stores/aiStore';
+import { useParticleStore } from '../stores/particleStore';
 import { ollamaService } from '../services/ollamaService';
 import type { Vector3 } from '../types/spatial.types';
 
@@ -207,6 +208,9 @@ export function useHandInteraction() {
       initialRotation: rotation,
     });
 
+    // Emit grab particle effect
+    useParticleStore.getState().emitGrab(handPos);
+
     console.log(`[HandInteraction] Grabbed object ${objectId} with ${hand} hand`);
   }
 
@@ -326,6 +330,17 @@ export function useHandInteraction() {
 
     // Calculate speed (magnitude)
     const speed = Math.sqrt(velocity[0] ** 2 + velocity[1] ** 2 + velocity[2] ** 2);
+
+    // Get object position for particle effect
+    const obj = useSpatialStore.getState().getObject(objectId);
+    if (obj) {
+      // Emit particle effect (throw if speed > 1 m/s, otherwise release)
+      if (speed > 1.0) {
+        useParticleStore.getState().emitThrow(obj.position, velocity);
+      } else {
+        useParticleStore.getState().emitRelease(obj.position, velocity);
+      }
+    }
 
     console.log(`[HandInteraction] Released object ${objectId}, velocity:`, velocity, `speed: ${speed.toFixed(2)} m/s`);
 

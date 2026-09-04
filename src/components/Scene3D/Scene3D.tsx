@@ -8,17 +8,21 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, PerspectiveCamera } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import { useVisibleObjects } from '../../stores/spatialStore';
+import { useParticleStore } from '../../stores/particleStore';
 import { useHandInteraction } from '../../hooks/useHandInteraction';
 import { useCameraPositionTracking } from '../../hooks/useCameraPositionTracking';
 import SpatialObject from './SpatialObject';
 import HandCursor from './HandCursor';
 import AIResponseBubble from '../UI/AIResponseBubble';
+import ParticleEffects from './ParticleEffects';
 
 /**
  * Scene content (must be inside Canvas)
  */
 function SceneContent() {
   const objects = useVisibleObjects();
+  const particleEvents = useParticleStore((state) => state.events);
+  const removeParticleEvent = useParticleStore((state) => state.removeEvent);
 
   // Enable hand-object interaction
   useHandInteraction();
@@ -66,6 +70,9 @@ function SceneContent() {
 
       {/* AI Response Bubble - floats in 3D space, independent of physics */}
       <AIResponseBubble />
+
+      {/* Particle Effects - visual feedback for hand interactions */}
+      <ParticleEffects events={particleEvents} onEventComplete={removeParticleEvent} />
 
       {/* Grid helper */}
       <Grid
