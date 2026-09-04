@@ -103,6 +103,9 @@ export function useHandInteraction() {
       } else if (hand.gesture === 'fist') {
         // FIST: Trigger AI query about nearby spatial context
         triggerAIQuery(hand.position, AI_QUERY_RADIUS);
+      } else if (hand.gesture === 'point') {
+        // POINT: Highlight nearest object with emissive glow
+        highlightNearestObject(hand.position, GRAB_DISTANCE);
       } else {
         // OPEN/OTHER: Released pinch - drop any held objects
         grabbedObjects.current.forEach((grabbed, objectId) => {
@@ -348,6 +351,32 @@ export function useHandInteraction() {
 
     // Query AI
     aiStore.queryAI(prompt, handPos);
+  }
+
+  /**
+   * Highlight the nearest object within range
+   */
+  function highlightNearestObject(handPos: Vector3, maxDistance: number) {
+    const objects = useSpatialStore.getState().getAllObjects();
+
+    // First, clear all highlights
+    objects.forEach((obj) => {
+      if (obj.highlighted) {
+        useSpatialStore.getState().updateObject(obj.id, {
+          highlighted: false,
+        });
+      }
+    });
+
+    // Find nearest object
+    const nearestObject = findNearestObject(handPos, maxDistance);
+
+    // Highlight it if found
+    if (nearestObject) {
+      useSpatialStore.getState().updateObject(nearestObject.id, {
+        highlighted: true,
+      });
+    }
   }
 
   return {
