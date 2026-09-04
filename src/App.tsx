@@ -162,9 +162,9 @@ function App() {
 
               // Create new objects at hand-reachable positions
               // Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
-              store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6] });
-              store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6] });
-              store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6] });
+              store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6], createdBy: 'hand' });
+              store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6], createdBy: 'hand' });
+              store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6], createdBy: 'hand' });
             });
           }}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
