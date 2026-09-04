@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Vector3 } from '../types/spatial.types';
 
 export interface SpatialMemory {
@@ -48,9 +49,11 @@ function generateMemoryId(): string {
 }
 
 /**
- * Spatial Memory Store (persistence temporarily disabled for debugging)
+ * Spatial Memory Store
  */
-export const useSpatialMemoryStore = create<SpatialMemoryState>()((set, get) => ({
+export const useSpatialMemoryStore = create<SpatialMemoryState>()(
+  persist(
+    (set, get) => ({
       memories: [],
 
       /**
@@ -145,7 +148,13 @@ export const useSpatialMemoryStore = create<SpatialMemoryState>()((set, get) => 
         set({ memories: [] });
         console.log('[SpatialMemory] Cleared all memories');
       },
-    }));
+    }),
+    {
+      name: 'spatial-memory-storage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
 
 /**
  * Helper selectors

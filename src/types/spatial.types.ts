@@ -81,6 +81,7 @@ export interface SpatialStoreState {
   // State
   objects: Map<string, SpatialObject>;
   currentRoom: string;
+  debugMode: boolean;
 
   // Actions
   addObject: (obj: Pick<SpatialObject, 'type' | 'content' | 'createdBy'> & {
@@ -106,6 +107,9 @@ export interface SpatialStoreState {
 
   // Room management
   setCurrentRoom: (room: string) => void;
+
+  // Debug mode
+  setDebugMode: (enabled: boolean) => void;
 }
 
 /**

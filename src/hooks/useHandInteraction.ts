@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { useLeftHand, useRightHand } from '../stores/handStore';
 import { useSpatialStore } from '../stores/spatialStore';
 import { useAIStore } from '../stores/aiStore';
+import { useSpatialMemoryStore } from '../stores/spatialMemoryStore';
 import { ollamaService } from '../services/ollamaService';
 import type { Vector3 } from '../types/spatial.types';
 
@@ -370,7 +371,6 @@ export function useHandInteraction() {
     const nearbyObjects = findNearbyObjects(handPos, radius);
 
     // Find nearby spatial memories
-    const { useSpatialMemoryStore } = require('../stores/spatialMemoryStore');
     const nearbyMemories = useSpatialMemoryStore.getState().findNearbyMemories(handPos, radius);
 
     console.log(`[HandInteraction] Fist gesture detected! Hand at:`, handPos, `Nearby objects:`, nearbyObjects.length, `Nearby memories:`, nearbyMemories.length);
