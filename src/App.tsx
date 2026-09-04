@@ -1,8 +1,13 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import StatusBar from './components/UI/StatusBar';
+import VoiceIndicator from './components/UI/VoiceIndicator';
+import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
+import { useVoiceStore } from './stores/voiceStore';
+import { getVoiceService } from './services/voiceService';
+import type { VoiceCommand } from './services/voiceService';
 
 // Lazy load heavy components
 const Scene3D = lazy(() => import('./components/Scene3D/Scene3D'));
@@ -31,6 +36,18 @@ function App() {
       const { initializeSensorFusion } = await import('./services/sensorFusion');
       fusionService = initializeSensorFusion();
 
+      // Initialize voice service
+      const voiceService = getVoiceService();
+      useVoiceStore.getState().setAvailable(voiceService.isAvailable());
+
+      // Handle voice commands
+      voiceService.onCommand(handleVoiceCommand);
+      voiceService.onTranscript((text) => {
+        useVoiceStore.getState().setTranscript(text);
+      });
+
+      console.log('[App] ✅ Voice service initialized, available:', voiceService.isAvailable());
+
       // Test Ollama connection
       const ollamaAvailable = await ollamaService.ping();
       if (ollamaAvailable) {
@@ -45,6 +62,102 @@ function App() {
     return () => {
       if (mcpClient) mcpClient.disconnect();
       if (fusionService) fusionService.stop();
+    };
+  }, []);
+
+  // Handle voice commands
+  const handleVoiceCommand = (command: VoiceCommand) => {
+    const store = useSpatialStore.getState();
+    const voiceStore = useVoiceStore.getState();
+
+    console.log('[App] Voice command received:', command);
+    voiceStore.setLastCommand(command.type);
+
+    switch (command.type) {
+      case 'create_note':
+        store.addObject({
+          type: 'note',
+          content: { text: command.text },
+          position: [0, 1, -2], // In front of user
+          createdBy: 'voice',
+        });
+        break;
+
+      case 'create_timer':
+        store.addObject({
+          type: 'timer',
+          content: {
+            duration: command.duration,
+            label: command.label,
+            startTime: Date.now(),
+            remainingTime: command.duration,
+          },
+          position: [0.5, 1, -2],
+          createdBy: 'voice',
+        });
+        break;
+
+      case 'create_image':
+        store.addObject({
+          type: 'image',
+          content: { url: command.url },
+          position: [-0.5, 1, -2],
+          createdBy: 'voice',
+        });
+        break;
+
+      case 'create_widget':
+        store.addObject({
+          type: 'widget',
+          content: { widgetType: command.widgetType as any },
+          position: [0, 1.5, -2],
+          createdBy: 'voice',
+        });
+        break;
+
+      case 'delete_all':
+        const objects = store.getAllObjects();
+        objects.forEach((obj) => store.deleteObject(obj.id));
+        console.log('[App] Deleted all objects');
+        break;
+
+      case 'unknown':
+        console.warn('[App] Unknown voice command:', command.rawText);
+        voiceStore.setError(`Unknown command: "${command.rawText}"`);
+        setTimeout(() => voiceStore.setError(null), 3000);
+        break;
+    }
+  };
+
+  // Keyboard shortcuts: Spacebar (PTT voice)
+  useEffect(() => {
+    const voiceService = getVoiceService();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // PTT: Start voice recognition on spacebar press
+      if (e.key === ' ' && !e.repeat) {
+        e.preventDefault();
+        voiceService.startListening();
+        useVoiceStore.getState().setListening(true);
+        useVoiceStore.getState().clearTranscript();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // PTT: Stop voice recognition on spacebar release
+      if (e.key === ' ') {
+        e.preventDefault();
+        voiceService.stopListening();
+        useVoiceStore.getState().setListening(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
 
@@ -134,24 +247,47 @@ function App() {
         {/* Test Objects Button */}
         <button
           onClick={() => {
-            import('./stores/spatialStore').then(({ useSpatialStore }) => {
-              const store = useSpatialStore.getState();
-              // Clear old objects first
-              const objects = store.getAllObjects();
-              objects.forEach(obj => store.deleteObject(obj.id));
+            import('./services/a2aService').then(({ a2aService }) => {
+              import('./stores/spatialStore').then(({ useSpatialStore }) => {
+                const store = useSpatialStore.getState();
 
-              // Create new objects at hand-reachable positions
-              // Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
-              store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6] });
-              store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6] });
-              store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6] });
+                // Clear old objects first
+                const objects = store.getAllObjects();
+                objects.forEach(obj => {
+                  store.deleteObject(obj.id);
+                  // Broadcast deletion if A2A is connected
+                  if (a2aService.isConnected()) {
+                    a2aService.broadcastObjectDeleted(obj.id);
+                  }
+                });
+
+                // Create new objects at hand-reachable positions
+                // Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
+                const note = store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6], createdBy: 'hand' });
+                const timer = store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6], createdBy: 'hand' });
+                const widget = store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6], createdBy: 'hand' });
+
+                // Broadcast creations if A2A is connected
+                if (a2aService.isConnected()) {
+                  const noteObj = store.getObject(note);
+                  const timerObj = store.getObject(timer);
+                  const widgetObj = store.getObject(widget);
+
+                  if (noteObj) a2aService.broadcastObjectCreated(noteObj);
+                  if (timerObj) a2aService.broadcastObjectCreated(timerObj);
+                  if (widgetObj) a2aService.broadcastObjectCreated(widgetObj);
+                }
+              });
             });
           }}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
         >
-          ✨ Create Test Objects
+          ✨ Create Test Objects (Multi-User)
         </button>
       </div>
+
+      {/* Voice Indicator */}
+      <VoiceIndicator />
     </div>
     </ErrorBoundary>
   );
