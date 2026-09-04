@@ -18,6 +18,8 @@ export interface HandState {
   gesture: 'pinch' | 'open' | 'fist' | 'point' | 'none';
   visible: boolean;
   confidence: number;
+  pinchDistance?: number; // Distance between thumb and index tips (0-1, normalized)
+  rotation?: number; // Hand rotation in radians around Y axis
 }
 
 interface HandStoreState {

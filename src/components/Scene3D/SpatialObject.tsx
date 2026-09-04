@@ -77,6 +77,8 @@ function NoteObject({ object, meshRef }: { object: SpatialObjectType; meshRef: a
             opacity={0.9}
             roughness={0.3}
             metalness={0.1}
+            emissive={object.highlighted ? "#3b82f6" : "#000000"}
+            emissiveIntensity={object.highlighted ? 0.5 : 0}
           />
         </mesh>
 
@@ -211,8 +213,8 @@ function TimerObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
           <cylinderGeometry args={[0.8, 0.8, 0.1, 32]} />
           <meshStandardMaterial
             color={timerColor}
-            emissive={isComplete ? timerColor : '#000000'}
-            emissiveIntensity={isComplete ? 0.5 : 0}
+            emissive={(isComplete || object.highlighted) ? timerColor : '#000000'}
+            emissiveIntensity={(isComplete || object.highlighted) ? 0.5 : 0}
             transparent
             opacity={0.9}
             roughness={0.3}
@@ -337,7 +339,13 @@ function ImageObject({ object, meshRef }: { object: SpatialObjectType; meshRef: 
         {/* Frame background */}
         <mesh ref={meshRef} castShadow position={[0, 0, -0.02]}>
           <boxGeometry args={[displayWidth + 0.1, displayHeight * aspectRatio + 0.1, 0.05]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.8} metalness={0.2} />
+          <meshStandardMaterial
+            color="#1a1a1a"
+            roughness={0.8}
+            metalness={0.2}
+            emissive={object.highlighted ? "#ffffff" : "#000000"}
+            emissiveIntensity={object.highlighted ? 0.5 : 0}
+          />
         </mesh>
 
         {/* Image plane */}
@@ -489,6 +497,8 @@ function WidgetObject({ object, meshRef }: { object: SpatialObjectType; meshRef:
             opacity={0.95}
             roughness={0.4}
             metalness={0.3}
+            emissive={object.highlighted ? "#1e293b" : "#000000"}
+            emissiveIntensity={object.highlighted ? 0.5 : 0}
           />
         </mesh>
 
@@ -544,6 +554,8 @@ function DefaultObject({ object, meshRef }: { object: SpatialObjectType; meshRef
           color="#888888"
           roughness={0.5}
           metalness={0.2}
+          emissive={object.highlighted ? "#888888" : "#000000"}
+          emissiveIntensity={object.highlighted ? 0.5 : 0}
         />
       </mesh>
     </RigidBody>

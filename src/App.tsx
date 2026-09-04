@@ -1,7 +1,6 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import StatusBar from './components/UI/StatusBar';
-import TestHarness from './components/UI/TestHarness';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
 
@@ -31,10 +30,6 @@ function App() {
       // Initialize sensor fusion (starts immediately)
       const { initializeSensorFusion } = await import('./services/sensorFusion');
       fusionService = initializeSensorFusion();
-
-      // Initialize hand simulator service (for testing)
-      const { initializeHandSimulator } = await import('./services/handSimulatorService');
-      initializeHandSimulator();
 
       // Test Ollama connection
       const ollamaAvailable = await ollamaService.ping();
@@ -157,9 +152,6 @@ function App() {
           ✨ Create Test Objects
         </button>
       </div>
-
-      {/* Test Harness for automated physics testing */}
-      <TestHarness />
     </div>
     </ErrorBoundary>
   );

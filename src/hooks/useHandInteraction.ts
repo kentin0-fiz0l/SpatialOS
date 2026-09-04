@@ -21,6 +21,11 @@ interface GrabbedObject {
   hand: 'left' | 'right';
   offset: Vector3; // Offset from hand position to object center
   positionHistory: PositionSample[]; // Last 5 positions for velocity calc
+  twoHanded?: boolean; // Is this object being grabbed with both hands?
+  initialScale?: Vector3; // Object's scale when grab started
+  initialDistance?: number; // Distance between hands when two-handed grab started (two-handed mode)
+  initialPinchDistance?: number; // Pinch distance when grabbed (single-hand scaling)
+  initialRotation?: number; // Hand rotation when grabbed (single-hand rotation)
 }
 
 /**
@@ -88,18 +93,21 @@ export function useHandInteraction() {
         if (heldObject) {
           // Update held object position
           const [objectId, grabbed] = heldObject as [string, GrabbedObject];
-          updateGrabbedObject(objectId, grabbed, hand.position);
+          updateGrabbedObject(objectId, grabbed, hand.position, hand.pinchDistance, hand.rotation);
         } else {
           // Try to grab nearest object
           const nearestObject = findNearestObject(hand.position, GRAB_DISTANCE);
           console.log(`[HandInteraction] Pinch detected on ${handSide} hand at`, hand.position, 'nearest:', nearestObject);
           if (nearestObject) {
-            grabObject(nearestObject.id, handSide, hand.position, nearestObject.position);
+            grabObject(nearestObject.id, handSide, hand.position, nearestObject.position, hand.pinchDistance, hand.rotation);
           }
         }
       } else if (hand.gesture === 'fist') {
         // FIST: Trigger AI query about nearby spatial context
         triggerAIQuery(hand.position, AI_QUERY_RADIUS);
+      } else if (hand.gesture === 'point') {
+        // POINT: Highlight nearest object with emissive glow
+        highlightNearestObject(hand.position, GRAB_DISTANCE);
       } else {
         // OPEN/OTHER: Released pinch - drop any held objects
         grabbedObjects.current.forEach((grabbed, objectId) => {
@@ -110,6 +118,39 @@ export function useHandInteraction() {
         });
       }
     });
+
+    // TWO-HANDED DETECTION: Check if both hands are grabbing the same object
+    if (leftHand?.visible && rightHand?.visible &&
+        leftHand.gesture === 'pinch' && rightHand.gesture === 'pinch') {
+
+      // Find objects grabbed by each hand
+      const leftGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'left'
+      );
+      const rightGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'right'
+      );
+
+      // If both hands are grabbing the same object, enable two-handed mode
+      if (leftGrabbed && rightGrabbed && leftGrabbed[0] === rightGrabbed[0]) {
+        const [objectId, grabbed] = leftGrabbed;
+
+        // Initialize two-handed mode if not already
+        if (!grabbed.twoHanded) {
+          const obj = useSpatialStore.getState().getAllObjects().find(o => o.id === objectId);
+          const currentDistance = distance3D(leftHand.position, rightHand.position);
+
+          grabbed.twoHanded = true;
+          grabbed.initialScale = obj?.scale || [1, 1, 1];
+          grabbed.initialDistance = currentDistance;
+
+          console.log(`[HandInteraction] Two-handed grab enabled for ${objectId}`);
+        }
+
+        // Update object position and scale based on hand positions
+        updateTwoHandedObject(objectId, grabbed, leftHand.position, rightHand.position);
+      }
+    }
   }, [leftHand, rightHand]); // Removed spatialStore from dependencies
 
   /**
@@ -146,30 +187,67 @@ export function useHandInteraction() {
     objectId: string,
     hand: 'left' | 'right',
     handPos: Vector3,
-    objectPos: Vector3
+    objectPos: Vector3,
+    pinchDistance?: number,
+    rotation?: number
   ) {
     const offset = subtractVectors(objectPos, handPos);
     const now = Date.now();
+
+    // Get current object state for initial scale
+    const obj = useSpatialStore.getState().getAllObjects().find(o => o.id === objectId);
 
     grabbedObjects.current.set(objectId, {
       id: objectId,
       hand,
       offset,
       positionHistory: [{ position: handPos, timestamp: now }],
+      initialScale: obj?.scale || [1, 1, 1],
+      initialPinchDistance: pinchDistance,
+      initialRotation: rotation,
     });
 
     console.log(`[HandInteraction] Grabbed object ${objectId} with ${hand} hand`);
   }
 
   /**
-   * Update grabbed object position
+   * Update grabbed object position, scale, and rotation
    */
-  function updateGrabbedObject(objectId: string, grabbed: GrabbedObject, handPos: Vector3) {
+  function updateGrabbedObject(
+    objectId: string,
+    grabbed: GrabbedObject,
+    handPos: Vector3,
+    currentPinchDistance?: number,
+    currentRotation?: number
+  ) {
     const newPosition = addVectors(handPos, grabbed.offset);
     const now = Date.now();
 
+    // Calculate scale based on pinch distance change
+    let newScale: Vector3 | undefined;
+    if (grabbed.initialScale && grabbed.initialPinchDistance && currentPinchDistance) {
+      const scaleMultiplier = currentPinchDistance / grabbed.initialPinchDistance;
+      newScale = [
+        grabbed.initialScale[0] * scaleMultiplier,
+        grabbed.initialScale[1] * scaleMultiplier,
+        grabbed.initialScale[2] * scaleMultiplier,
+      ];
+    }
+
+    // Calculate rotation based on hand rotation change
+    let newRotation: [number, number, number, number] | undefined;
+    if (grabbed.initialRotation !== undefined && currentRotation !== undefined) {
+      const rotationDelta = currentRotation - grabbed.initialRotation;
+      // Convert to quaternion for Y-axis rotation: [0, sin(θ/2), 0, cos(θ/2)]
+      const halfAngle = rotationDelta / 2;
+      newRotation = [0, Math.sin(halfAngle), 0, Math.cos(halfAngle)];
+    }
+
+    // Update object with new position, scale, and rotation
     useSpatialStore.getState().updateObject(objectId, {
       position: newPosition,
+      ...(newScale && { scale: newScale }),
+      ...(newRotation && { rotation: newRotation }),
     });
 
     // Track position history for velocity calculation (keep last 5 samples)
@@ -177,6 +255,46 @@ export function useHandInteraction() {
     if (grabbed.positionHistory.length > 5) {
       grabbed.positionHistory.shift();
     }
+  }
+
+  /**
+   * Update object being grabbed with both hands
+   * Position: midpoint between hands
+   * Scale: proportional to distance between hands
+   */
+  function updateTwoHandedObject(
+    objectId: string,
+    grabbed: GrabbedObject,
+    leftHandPos: Vector3,
+    rightHandPos: Vector3
+  ) {
+    if (!grabbed.initialScale || !grabbed.initialDistance) return;
+
+    // Calculate midpoint for new position
+    const midpoint: Vector3 = [
+      (leftHandPos[0] + rightHandPos[0]) / 2,
+      (leftHandPos[1] + rightHandPos[1]) / 2,
+      (leftHandPos[2] + rightHandPos[2]) / 2,
+    ];
+
+    // Calculate current distance between hands
+    const currentDistance = distance3D(leftHandPos, rightHandPos);
+
+    // Calculate scale multiplier (how much hands have moved apart/together)
+    const scaleMultiplier = currentDistance / grabbed.initialDistance;
+
+    // Apply scale to all axes uniformly
+    const newScale: Vector3 = [
+      grabbed.initialScale[0] * scaleMultiplier,
+      grabbed.initialScale[1] * scaleMultiplier,
+      grabbed.initialScale[2] * scaleMultiplier,
+    ];
+
+    // Update object position and scale
+    useSpatialStore.getState().updateObject(objectId, {
+      position: midpoint,
+      scale: newScale,
+    });
   }
 
   /**
@@ -272,6 +390,32 @@ export function useHandInteraction() {
 
     // Query AI
     aiStore.queryAI(prompt, handPos);
+  }
+
+  /**
+   * Highlight the nearest object within range
+   */
+  function highlightNearestObject(handPos: Vector3, maxDistance: number) {
+    const objects = useSpatialStore.getState().getAllObjects();
+
+    // First, clear all highlights
+    objects.forEach((obj) => {
+      if (obj.highlighted) {
+        useSpatialStore.getState().updateObject(obj.id, {
+          highlighted: false,
+        });
+      }
+    });
+
+    // Find nearest object
+    const nearestObject = findNearestObject(handPos, maxDistance);
+
+    // Highlight it if found
+    if (nearestObject) {
+      useSpatialStore.getState().updateObject(nearestObject.id, {
+        highlighted: true,
+      });
+    }
   }
 
   return {
