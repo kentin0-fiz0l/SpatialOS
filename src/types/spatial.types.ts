@@ -82,13 +82,14 @@ export interface SpatialStoreState {
   currentRoom: string;
 
   // Actions
-  addObject: (obj: Omit<SpatialObject, 'id' | 'createdAt'> & {
+  addObject: (obj: Pick<SpatialObject, 'type' | 'content' | 'createdBy'> & {
     position?: Vector3;
     rotation?: Quaternion;
     scale?: Vector3;
     room?: string;
     persistent?: boolean;
     visible?: boolean;
+    highlighted?: boolean;
   }) => string;
   updateObject: (id: string, updates: Partial<SpatialObject>) => void;
   deleteObject: (id: string) => void;

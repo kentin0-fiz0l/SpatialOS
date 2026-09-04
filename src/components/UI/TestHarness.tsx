@@ -54,6 +54,7 @@ export default function TestHarness() {
       type: 'note',
       content: { text: 'Test Object' },
       position: sequence.grabPos,
+      createdBy: 'hand',
     });
     console.log('[TestHarness] Created test object at:', sequence.grabPos);
 
