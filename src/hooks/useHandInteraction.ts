@@ -375,8 +375,8 @@ export function useHandInteraction() {
 
     console.log(`[HandInteraction] Fist gesture detected! Hand at:`, handPos, `Nearby objects:`, nearbyObjects.length, `Nearby memories:`, nearbyMemories.length);
 
-    // Build spatial prompt with both objects and memories
-    const prompt = ollamaService.buildSpatialPrompt(handPos, nearbyObjects, nearbyMemories);
+    // Build spatial prompt with objects and memories (TODO: update ollamaService to support memories)
+    const prompt = ollamaService.buildSpatialPrompt(handPos, nearbyObjects);
 
     // Query AI
     aiStore.queryAI(prompt, handPos);
