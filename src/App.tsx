@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import StatusBar from './components/UI/StatusBar';
 import VoiceIndicator from './components/UI/VoiceIndicator';
+import ErrorOverlay from './components/UI/ErrorOverlay';
 import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
@@ -22,6 +23,7 @@ function App() {
     // Lazy load services to reduce initial bundle
     let mcpClient: any;
     let fusionService: any;
+    let a2a: any;
 
     (async () => {
       // Initialize store (load saved objects)
@@ -35,6 +37,16 @@ function App() {
       // Initialize sensor fusion (starts immediately)
       const { initializeSensorFusion } = await import('./services/sensorFusion');
       fusionService = initializeSensorFusion();
+
+      // Initialize A2A for multi-user collaboration
+      try {
+        const { initializeA2A, a2aService } = await import('./services/a2aService');
+        await initializeA2A();
+        a2a = a2aService;
+        console.log('[App] ✅ A2A multi-user enabled');
+      } catch (error) {
+        console.warn('[App] ⚠️  A2A unavailable, running single-user mode');
+      }
 
       // Initialize voice service
       const voiceService = getVoiceService();
@@ -62,6 +74,7 @@ function App() {
     return () => {
       if (mcpClient) mcpClient.disconnect();
       if (fusionService) fusionService.stop();
+      if (a2a) a2a.disconnect();
     };
   }, []);
 
@@ -288,6 +301,9 @@ function App() {
 
       {/* Voice Indicator */}
       <VoiceIndicator />
+
+      {/* Error Overlay - shows error messages */}
+      <ErrorOverlay />
     </div>
     </ErrorBoundary>
   );
