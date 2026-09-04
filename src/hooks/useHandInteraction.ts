@@ -21,6 +21,9 @@ interface GrabbedObject {
   hand: 'left' | 'right';
   offset: Vector3; // Offset from hand position to object center
   positionHistory: PositionSample[]; // Last 5 positions for velocity calc
+  twoHanded?: boolean; // Is object grabbed with both hands?
+  initialScale?: Vector3; // Original scale when two-handed grab started
+  initialDistance?: number; // Initial distance between hands (two-handed mode)
 }
 
 /**
@@ -100,16 +103,70 @@ export function useHandInteraction() {
       } else if (hand.gesture === 'fist') {
         // FIST: Trigger AI query about nearby spatial context
         triggerAIQuery(hand.position, AI_QUERY_RADIUS);
+      } else if (hand.gesture === 'point') {
+        // POINT: Highlight nearest object
+        highlightNearestObject(hand.position, GRAB_DISTANCE);
       } else {
         // OPEN/OTHER: Released pinch - drop any held objects
         grabbedObjects.current.forEach((grabbed, objectId) => {
           if (grabbed.hand === handSide) {
+            // If in two-handed mode, check if the OTHER hand is still holding
+            if (grabbed.twoHanded) {
+              const otherHand = handSide === 'left' ? 'right' : 'left';
+              const otherGrabbed = Array.from(grabbedObjects.current.entries()).find(
+                ([id, g]) => id === objectId && g.hand === otherHand
+              );
+
+              if (otherGrabbed) {
+                // Other hand is still grabbing - exit two-handed mode, keep object with other hand
+                console.log(`[HandInteraction] Exiting two-handed mode for ${objectId}, keeping with ${otherHand} hand`);
+                grabbed.twoHanded = false;
+                grabbed.initialScale = undefined;
+                grabbed.initialDistance = undefined;
+                grabbedObjects.current.delete(objectId); // Remove this hand's entry
+                return; // Don't release the object
+              }
+            }
+
+            // Normal release: no two-handed mode or both hands released
             releaseObject(objectId, grabbed);
             grabbedObjects.current.delete(objectId);
           }
         });
       }
     });
+
+    // Two-handed grabbing: Check if both hands are pinching the same object
+    if (leftHand?.visible && rightHand?.visible &&
+        leftHand.gesture === 'pinch' && rightHand.gesture === 'pinch') {
+
+      const leftGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'left'
+      );
+      const rightGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'right'
+      );
+
+      // If both hands are grabbing the same object, enable two-handed mode
+      if (leftGrabbed && rightGrabbed && leftGrabbed[0] === rightGrabbed[0]) {
+        const [objectId, grabbed] = leftGrabbed;
+
+        // Initialize two-handed mode if not already active
+        if (!grabbed.twoHanded) {
+          const obj = useSpatialStore.getState().getObject(objectId);
+          if (obj) {
+            const initialDistance = distance3D(leftHand.position, rightHand.position);
+            grabbed.twoHanded = true;
+            grabbed.initialScale = obj.scale;
+            grabbed.initialDistance = initialDistance;
+            console.log(`[HandInteraction] Two-handed grab started for ${objectId}, initial distance: ${initialDistance.toFixed(2)}m`);
+          }
+        }
+
+        // Update two-handed object
+        updateTwoHandedObject(objectId, grabbed, leftHand.position, rightHand.position);
+      }
+    }
   }, [leftHand, rightHand]); // Removed spatialStore from dependencies
 
   /**
@@ -174,6 +231,53 @@ export function useHandInteraction() {
 
     // Track position history for velocity calculation (keep last 5 samples)
     grabbed.positionHistory.push({ position: handPos, timestamp: now });
+    if (grabbed.positionHistory.length > 5) {
+      grabbed.positionHistory.shift();
+    }
+  }
+
+  /**
+   * Update two-handed object (position + scale)
+   */
+  function updateTwoHandedObject(
+    objectId: string,
+    grabbed: GrabbedObject,
+    leftHandPos: Vector3,
+    rightHandPos: Vector3
+  ) {
+    if (!grabbed.twoHanded || !grabbed.initialScale || !grabbed.initialDistance) {
+      return; // Not in two-handed mode
+    }
+
+    // Calculate midpoint between hands (object position)
+    const midpoint: Vector3 = [
+      (leftHandPos[0] + rightHandPos[0]) / 2,
+      (leftHandPos[1] + rightHandPos[1]) / 2,
+      (leftHandPos[2] + rightHandPos[2]) / 2,
+    ];
+
+    // Calculate current distance between hands
+    const currentDistance = distance3D(leftHandPos, rightHandPos);
+
+    // Calculate scale multiplier (how much to scale object)
+    const scaleMultiplier = currentDistance / grabbed.initialDistance;
+
+    // Apply new scale (multiply initial scale by multiplier)
+    const newScale: Vector3 = [
+      grabbed.initialScale[0] * scaleMultiplier,
+      grabbed.initialScale[1] * scaleMultiplier,
+      grabbed.initialScale[2] * scaleMultiplier,
+    ];
+
+    // Update object position and scale
+    useSpatialStore.getState().updateObject(objectId, {
+      position: midpoint,
+      scale: newScale,
+    });
+
+    // Track position history for velocity (use midpoint)
+    const now = Date.now();
+    grabbed.positionHistory.push({ position: midpoint, timestamp: now });
     if (grabbed.positionHistory.length > 5) {
       grabbed.positionHistory.shift();
     }
@@ -272,6 +376,30 @@ export function useHandInteraction() {
 
     // Query AI
     aiStore.queryAI(prompt, handPos);
+  }
+
+  /**
+   * Highlight nearest object when pointing
+   */
+  function highlightNearestObject(handPos: Vector3, maxDistance: number) {
+    const spatialStore = useSpatialStore.getState();
+    const allObjects = spatialStore.getAllObjects();
+
+    // Clear all highlights first
+    allObjects.forEach((obj) => {
+      if (obj.highlighted) {
+        spatialStore.updateObject(obj.id, { highlighted: false });
+      }
+    });
+
+    // Find nearest object
+    const nearest = findNearestObject(handPos, maxDistance);
+
+    if (nearest) {
+      // Highlight the nearest object
+      spatialStore.updateObject(nearest.id, { highlighted: true });
+      console.log(`[HandInteraction] Highlighting object ${nearest.id} at distance ${nearest.distance.toFixed(2)}m`);
+    }
   }
 
   return {
