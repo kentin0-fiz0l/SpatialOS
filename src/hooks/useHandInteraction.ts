@@ -369,10 +369,14 @@ export function useHandInteraction() {
     // Find nearby objects
     const nearbyObjects = findNearbyObjects(handPos, radius);
 
-    console.log(`[HandInteraction] Fist gesture detected! Hand at:`, handPos, `Nearby objects:`, nearbyObjects.length);
+    // Find nearby spatial memories
+    const { useSpatialMemoryStore } = require('../stores/spatialMemoryStore');
+    const nearbyMemories = useSpatialMemoryStore.getState().findNearbyMemories(handPos, radius);
 
-    // Build spatial prompt
-    const prompt = ollamaService.buildSpatialPrompt(handPos, nearbyObjects);
+    console.log(`[HandInteraction] Fist gesture detected! Hand at:`, handPos, `Nearby objects:`, nearbyObjects.length, `Nearby memories:`, nearbyMemories.length);
+
+    // Build spatial prompt with both objects and memories
+    const prompt = ollamaService.buildSpatialPrompt(handPos, nearbyObjects, nearbyMemories);
 
     // Query AI
     aiStore.queryAI(prompt, handPos);
