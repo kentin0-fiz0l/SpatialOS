@@ -21,6 +21,9 @@ interface GrabbedObject {
   hand: 'left' | 'right';
   offset: Vector3; // Offset from hand position to object center
   positionHistory: PositionSample[]; // Last 5 positions for velocity calc
+  twoHanded?: boolean; // Is this object being grabbed with both hands?
+  initialScale?: Vector3; // Object's scale when two-handed grab started
+  initialDistance?: number; // Distance between hands when two-handed grab started
 }
 
 /**
@@ -110,6 +113,39 @@ export function useHandInteraction() {
         });
       }
     });
+
+    // TWO-HANDED DETECTION: Check if both hands are grabbing the same object
+    if (leftHand?.visible && rightHand?.visible &&
+        leftHand.gesture === 'pinch' && rightHand.gesture === 'pinch') {
+
+      // Find objects grabbed by each hand
+      const leftGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'left'
+      );
+      const rightGrabbed = Array.from(grabbedObjects.current.entries()).find(
+        ([_, grabbed]) => grabbed.hand === 'right'
+      );
+
+      // If both hands are grabbing the same object, enable two-handed mode
+      if (leftGrabbed && rightGrabbed && leftGrabbed[0] === rightGrabbed[0]) {
+        const [objectId, grabbed] = leftGrabbed;
+
+        // Initialize two-handed mode if not already
+        if (!grabbed.twoHanded) {
+          const obj = useSpatialStore.getState().getAllObjects().find(o => o.id === objectId);
+          const currentDistance = distance3D(leftHand.position, rightHand.position);
+
+          grabbed.twoHanded = true;
+          grabbed.initialScale = obj?.scale || [1, 1, 1];
+          grabbed.initialDistance = currentDistance;
+
+          console.log(`[HandInteraction] Two-handed grab enabled for ${objectId}`);
+        }
+
+        // Update object position and scale based on hand positions
+        updateTwoHandedObject(objectId, grabbed, leftHand.position, rightHand.position);
+      }
+    }
   }, [leftHand, rightHand]); // Removed spatialStore from dependencies
 
   /**
@@ -177,6 +213,46 @@ export function useHandInteraction() {
     if (grabbed.positionHistory.length > 5) {
       grabbed.positionHistory.shift();
     }
+  }
+
+  /**
+   * Update object being grabbed with both hands
+   * Position: midpoint between hands
+   * Scale: proportional to distance between hands
+   */
+  function updateTwoHandedObject(
+    objectId: string,
+    grabbed: GrabbedObject,
+    leftHandPos: Vector3,
+    rightHandPos: Vector3
+  ) {
+    if (!grabbed.initialScale || !grabbed.initialDistance) return;
+
+    // Calculate midpoint for new position
+    const midpoint: Vector3 = [
+      (leftHandPos[0] + rightHandPos[0]) / 2,
+      (leftHandPos[1] + rightHandPos[1]) / 2,
+      (leftHandPos[2] + rightHandPos[2]) / 2,
+    ];
+
+    // Calculate current distance between hands
+    const currentDistance = distance3D(leftHandPos, rightHandPos);
+
+    // Calculate scale multiplier (how much hands have moved apart/together)
+    const scaleMultiplier = currentDistance / grabbed.initialDistance;
+
+    // Apply scale to all axes uniformly
+    const newScale: Vector3 = [
+      grabbed.initialScale[0] * scaleMultiplier,
+      grabbed.initialScale[1] * scaleMultiplier,
+      grabbed.initialScale[2] * scaleMultiplier,
+    ];
+
+    // Update object position and scale
+    useSpatialStore.getState().updateObject(objectId, {
+      position: midpoint,
+      scale: newScale,
+    });
   }
 
   /**

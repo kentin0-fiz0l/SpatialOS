@@ -137,12 +137,27 @@ export class HandTrackingService {
       // Detect gestures using all finger landmarks
       const gesture = this.detectGesture(landmarks);
 
+      // Calculate pinch distance (for two-handed interactions)
+      const dx = thumbTip.x - indexTip.x;
+      const dy = thumbTip.y - indexTip.y;
+      const dz = (thumbTip.z || 0) - (indexTip.z || 0);
+      const pinchDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      // Calculate hand rotation (wrist to middle finger base, projected onto XZ plane)
+      const wrist = landmarks[0];
+      const middleBase = landmarks[9]; // Middle finger MCP joint
+      const handVecX = middleBase.x - wrist.x;
+      const handVecZ = (middleBase.z || 0) - (wrist.z || 0);
+      const rotation = Math.atan2(handVecX, handVecZ);
+
       // Update hand store
       store.updateHand(handedness, {
         position,
         gesture,
         visible: true,
         confidence: results.multiHandedness[i]?.score || 0.9,
+        pinchDistance,
+        rotation,
       });
     }
   }
