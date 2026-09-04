@@ -9,12 +9,14 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, PerspectiveCamera } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import { useVisibleObjects } from '../../stores/spatialStore';
+import { useAllMemories } from '../../stores/spatialMemoryStore';
 import { useParticleStore } from '../../stores/particleStore';
 import { useHandInteraction } from '../../hooks/useHandInteraction';
 import { useCameraPositionTracking } from '../../hooks/useCameraPositionTracking';
 import { getSpatialAudioService } from '../../services/spatialAudio';
 import SpatialObject from './SpatialObject';
 import HandCursor from './HandCursor';
+import MemoryMarker from './MemoryMarker';
 import AIResponseBubble from '../UI/AIResponseBubble';
 import ParticleEffects from './ParticleEffects';
 
@@ -23,6 +25,7 @@ import ParticleEffects from './ParticleEffects';
  */
 function SceneContent() {
   const objects = useVisibleObjects();
+  const memories = useAllMemories();
   const particleEvents = useParticleStore((state) => state.events);
   const removeParticleEvent = useParticleStore((state) => state.removeEvent);
   const { camera } = useThree();
@@ -88,9 +91,16 @@ function SceneContent() {
         {/* Hand cursors */}
         <HandCursor hand="right" />
         <HandCursor hand="left" />
-
-        {/* AI Response Bubble (rendered outside physics for UI layer) */}
       </Physics>
+
+      {/* Spatial memory markers - float above ground, outside physics */}
+      {memories.map((memory) => (
+        <MemoryMarker
+          key={memory.id}
+          memory={memory}
+          onClick={(mem) => console.log('[Scene3D] Memory clicked:', mem.label)}
+        />
+      ))}
 
       {/* AI Response Bubble - floats in 3D space, independent of physics */}
       <AIResponseBubble />
