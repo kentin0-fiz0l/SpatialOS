@@ -2,11 +2,10 @@ import { useEffect, lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import StatusBar from './components/UI/StatusBar';
 import TestHarness from './components/UI/TestHarness';
+import SpatialMemoryPanel from './components/UI/SpatialMemoryPanel';
 import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
-import { useSpatialMemoryStore, useMemoryCount, useAllMemories } from './stores/spatialMemoryStore';
-import { useLeftHand, useRightHand } from './stores/handStore';
 
 // Lazy load heavy components
 const Scene3D = lazy(() => import('./components/Scene3D/Scene3D'));
@@ -16,10 +15,6 @@ const CalibrationPanel = lazy(() => import('./components/UI/CalibrationPanel'));
 function App() {
   const isAILoading = useAILoading();
   const aiError = useAIError();
-  const memoryCount = useMemoryCount();
-  const allMemories = useAllMemories();
-  const leftHand = useLeftHand();
-  const rightHand = useRightHand();
 
   useEffect(() => {
     // Lazy load services to reduce initial bundle
@@ -181,67 +176,8 @@ function App() {
       {/* Test Harness for automated physics testing */}
       <TestHarness />
 
-      {/* Spatial Memory Panel (bottom right) */}
-      <div className="absolute bottom-4 right-4 z-10">
-        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-3 text-xs max-w-xs">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-200">Spatial Memory</h3>
-            <span className="text-gray-400">({memoryCount})</span>
-          </div>
-
-          {/* Memory List */}
-          <div className="max-h-32 overflow-y-auto mb-2 space-y-1">
-            {allMemories.length === 0 ? (
-              <p className="text-gray-500 text-[10px] italic">No memories yet</p>
-            ) : (
-              allMemories.map((memory) => (
-                <div key={memory.id} className="bg-gray-800/50 rounded p-2">
-                  <div className="font-medium text-white text-[10px]">"{memory.label}"</div>
-                  <div className="text-gray-400 text-[9px]">
-                    [{memory.position[0].toFixed(1)}, {memory.position[1].toFixed(1)}, {memory.position[2].toFixed(1)}]
-                  </div>
-                  {memory.description && (
-                    <div className="text-gray-500 text-[9px] mt-0.5">{memory.description}</div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Create Memory Button */}
-          <button
-            onClick={() => {
-              // Use right hand position if visible, otherwise left, otherwise center
-              const hand = rightHand?.visible ? rightHand : leftHand?.visible ? leftHand : null;
-              const position = hand?.position || [0, 1, 0];
-
-              // Prompt for label
-              const label = window.prompt('Label for this location:', 'my desk');
-              if (label) {
-                const description = window.prompt('Description (optional):', '');
-                useAIStore.getState().rememberLocation(position, label, description || undefined);
-              }
-            }}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded text-[10px] font-semibold transition-colors mb-1"
-          >
-            📍 Remember This Spot
-          </button>
-
-          {/* Clear All Button */}
-          {memoryCount > 0 && (
-            <button
-              onClick={() => {
-                if (window.confirm(`Delete all ${memoryCount} spatial memories?`)) {
-                  useSpatialMemoryStore.getState().clearAllMemories();
-                }
-              }}
-              className="w-full bg-red-600/50 hover:bg-red-600 text-white px-2 py-1 rounded text-[9px] font-semibold transition-colors"
-            >
-              🗑️ Clear All
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Spatial Memory Panel */}
+      <SpatialMemoryPanel />
     </div>
     </ErrorBoundary>
   );
