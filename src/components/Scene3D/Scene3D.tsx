@@ -4,13 +4,15 @@
  * Renders spatial objects using React Three Fiber + HandTrack3D
  */
 
-import { Canvas } from '@react-three/fiber';
+import { useEffect } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, PerspectiveCamera } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import { useVisibleObjects } from '../../stores/spatialStore';
 import { useParticleStore } from '../../stores/particleStore';
 import { useHandInteraction } from '../../hooks/useHandInteraction';
 import { useCameraPositionTracking } from '../../hooks/useCameraPositionTracking';
+import { getSpatialAudioService } from '../../services/spatialAudio';
 import SpatialObject from './SpatialObject';
 import HandCursor from './HandCursor';
 import AIResponseBubble from '../UI/AIResponseBubble';
@@ -23,6 +25,28 @@ function SceneContent() {
   const objects = useVisibleObjects();
   const particleEvents = useParticleStore((state) => state.events);
   const removeParticleEvent = useParticleStore((state) => state.removeEvent);
+  const { camera } = useThree();
+
+  // Initialize spatial audio (attach listener to camera)
+  useEffect(() => {
+    const audioService = getSpatialAudioService();
+    audioService.initialize(camera);
+    console.log('[Scene3D] Spatial audio initialized');
+
+    // Resume audio context on first user interaction (autoplay policy)
+    const handleInteraction = () => {
+      audioService.resume();
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('keydown', handleInteraction);
+
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+  }, [camera]);
 
   // Enable hand-object interaction
   useHandInteraction();
