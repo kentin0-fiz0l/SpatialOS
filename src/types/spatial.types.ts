@@ -71,6 +71,7 @@ export interface SpatialObject {
   createdBy: 'voice' | 'hand'; // Creation source
   persistent: boolean; // Save to disk?
   visible: boolean; // Render in scene?
+  highlighted?: boolean; // Highlighted by point gesture?
 }
 
 /**
