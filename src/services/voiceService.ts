@@ -11,6 +11,7 @@ export type VoiceCommand =
   | { type: 'create_image'; url: string }
   | { type: 'create_widget'; widgetType: string }
   | { type: 'delete_all' }
+  | { type: 'remember_location'; label: string; description?: string }
   | { type: 'unknown'; rawText: string };
 
 /**
@@ -161,6 +162,17 @@ export class VoiceService {
     // Delete all: "delete everything" or "clear all"
     if (lower.match(/(?:delete|clear|remove)\s+(?:everything|all)/)) {
       return { type: 'delete_all' };
+    }
+
+    // Remember location: "remember this is my desk" or "this is my desk"
+    const rememberMatch = lower.match(/(?:remember )?(?:this is |here is )?(?:the )?(.+)/);
+    if (rememberMatch && (lower.includes('remember') || lower.includes('this is') || lower.includes('here is'))) {
+      const label = rememberMatch[1].trim();
+
+      // Only accept if label is meaningful (not empty and not just "this" or "here")
+      if (label && label !== 'this' && label !== 'here' && label.length > 1) {
+        return { type: 'remember_location', label };
+      }
     }
 
     // Unknown command

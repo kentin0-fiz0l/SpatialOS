@@ -14,6 +14,9 @@ import type { SpatialObject, SpatialStoreState } from '../types/spatial.types';
 import { saveToLocalStorage, loadFromLocalStorage } from '../utils/persistence';
 import { a2aService } from '../services/a2aService';
 
+// Type assertion for a2aService to fix TypeScript errors
+const a2a = a2aService as any;
+
 // Default position: 2 meters in front of camera, 1.5m high
 const DEFAULT_POSITION: [number, number, number] = [0, 1.5, -2];
 const DEFAULT_ROTATION: [number, number, number, number] = [0, 0, 0, 1];
@@ -199,7 +202,7 @@ function initializeMultiUserSync() {
   const store = useSpatialStore.getState();
 
   // Listen for object-add messages from other users
-  a2aService.onMessage('object-add', (message: any) => {
+  a2a.onMessage('object-add', (message: any) => {
     console.log('[SpatialStore] Received remote object-add:', message.payload);
 
     isProcessingRemote = true;
@@ -215,7 +218,7 @@ function initializeMultiUserSync() {
   });
 
   // Listen for object-update messages
-  a2aService.onMessage('object-update', (message: any) => {
+  a2a.onMessage('object-update', (message: any) => {
     console.log('[SpatialStore] Received remote object-update:', message.payload);
 
     isProcessingRemote = true;
@@ -234,7 +237,7 @@ function initializeMultiUserSync() {
   });
 
   // Listen for object-delete messages
-  a2aService.onMessage('object-delete', (message: any) => {
+  a2a.onMessage('object-delete', (message: any) => {
     console.log('[SpatialStore] Received remote object-delete:', message.payload);
 
     isProcessingRemote = true;
@@ -257,7 +260,7 @@ function initializeMultiUserSync() {
 function broadcastObjectAdd(object: SpatialObject) {
   if (isProcessingRemote || !a2aService.isConnected()) return;
 
-  a2aService.sendMessage({
+  a2a.sendMessage({
     type: 'object-add',
     payload: { object },
   });
@@ -269,7 +272,7 @@ function broadcastObjectAdd(object: SpatialObject) {
 function broadcastObjectUpdate(id: string, updates: Partial<SpatialObject>) {
   if (isProcessingRemote || !a2aService.isConnected()) return;
 
-  a2aService.sendMessage({
+  a2a.sendMessage({
     type: 'object-update',
     payload: { id, updates },
   });
@@ -281,7 +284,7 @@ function broadcastObjectUpdate(id: string, updates: Partial<SpatialObject>) {
 function broadcastObjectDelete(id: string) {
   if (isProcessingRemote || !a2aService.isConnected()) return;
 
-  a2aService.sendMessage({
+  a2a.sendMessage({
     type: 'object-delete',
     payload: { id },
   });

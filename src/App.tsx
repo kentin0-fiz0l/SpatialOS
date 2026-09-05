@@ -8,6 +8,7 @@ import SpatialMemoryPanel from './components/UI/SpatialMemoryPanel';
 import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
+import { useHandStore } from './stores/handStore';
 import { useVoiceStore } from './stores/voiceStore';
 import { getVoiceService } from './services/voiceService';
 import type { VoiceCommand } from './services/voiceService';
@@ -135,6 +136,24 @@ function App() {
         objects.forEach((obj) => store.deleteObject(obj.id));
         console.log('[App] Deleted all objects');
         break;
+
+      case 'remember_location': {
+        // Get hand position or use default
+        const leftHand = useHandStore.getState().leftHand;
+        const rightHand = useHandStore.getState().rightHand;
+        const hand = rightHand?.visible ? rightHand : leftHand?.visible ? leftHand : null;
+        const position = hand?.position || [0, 1, 0]; // Default to center if no hand visible
+
+        // Create spatial memory
+        useAIStore.getState().rememberLocation(
+          position,
+          command.label,
+          command.description
+        );
+
+        console.log(`[App] Created spatial memory "${command.label}" at`, position);
+        break;
+      }
 
       case 'unknown':
         console.warn('[App] Unknown voice command:', command.rawText);
@@ -269,6 +288,7 @@ function App() {
           <ul className="text-gray-300 space-y-0.5">
             <li>• "Create a note [text]"</li>
             <li>• "Set a timer for [duration]"</li>
+            <li>• "Remember this is [label]"</li>
           </ul>
         </div>
 
