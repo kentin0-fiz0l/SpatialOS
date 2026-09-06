@@ -258,7 +258,7 @@ function initializeMultiUserSync() {
  * Broadcast object addition to other users
  */
 function broadcastObjectAdd(object: SpatialObject) {
-  if (isProcessingRemote || !a2aService.isConnected()) return;
+  if (isProcessingRemote || !a2a.isConnected()) return;
 
   a2a.sendMessage({
     type: 'object-add',
@@ -270,7 +270,7 @@ function broadcastObjectAdd(object: SpatialObject) {
  * Broadcast object update to other users
  */
 function broadcastObjectUpdate(id: string, updates: Partial<SpatialObject>) {
-  if (isProcessingRemote || !a2aService.isConnected()) return;
+  if (isProcessingRemote || !a2a.isConnected()) return;
 
   a2a.sendMessage({
     type: 'object-update',
@@ -282,7 +282,7 @@ function broadcastObjectUpdate(id: string, updates: Partial<SpatialObject>) {
  * Broadcast object deletion to other users
  */
 function broadcastObjectDelete(id: string) {
-  if (isProcessingRemote || !a2aService.isConnected()) return;
+  if (isProcessingRemote || !a2a.isConnected()) return;
 
   a2a.sendMessage({
     type: 'object-delete',
