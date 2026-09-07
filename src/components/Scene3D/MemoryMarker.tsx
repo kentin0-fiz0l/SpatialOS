@@ -17,7 +17,7 @@ interface MemoryMarkerProps {
 
 export default function MemoryMarker({ memory, onClick }: MemoryMarkerProps) {
   const [hovered, setHovered] = useState(false);
-  const meshRef = useRef<any>();
+  const meshRef = useRef<any>(null);
 
   return (
     <group position={memory.position as Vector3}>

@@ -19,7 +19,7 @@ export default function Avatar3D({ position, content }: Avatar3DProps) {
   const meshRef = useRef<Mesh>(null);
   const time = useRef(0);
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (!meshRef.current) return;
 
     time.current += delta;
