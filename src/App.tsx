@@ -5,6 +5,7 @@ import VoiceIndicator from './components/UI/VoiceIndicator';
 import ErrorOverlay from './components/UI/ErrorOverlay';
 import TestHarness from './components/UI/TestHarness';
 import SpatialMemoryPanel from './components/UI/SpatialMemoryPanel';
+import SpatialMemorySuggestions from './components/UI/SpatialMemorySuggestions';
 import { useSpatialStore } from './stores/spatialStore';
 import { ollamaService } from './services/ollamaService';
 import { useAIStore, useAILoading, useAIError } from './stores/aiStore';
@@ -346,6 +347,9 @@ function App() {
 
       {/* Spatial Memory Panel */}
       <SpatialMemoryPanel />
+
+      {/* Spatial Memory Suggestions - AI-powered placement hints */}
+      <SpatialMemorySuggestions objectType="note" />
     </div>
     </ErrorBoundary>
   );

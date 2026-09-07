@@ -431,6 +431,53 @@ class A2AServiceImpl {
 
     console.log('[A2A] 📡 Scene Sync handlers registered');
   }
+
+  /**
+   * Query Spatial Memory for placement suggestions
+   */
+  async getPlacementSuggestion(objectType: string): Promise<{
+    suggestion: { position: [number, number, number]; reason: string; confidence: number } | null;
+    patterns?: any;
+  }> {
+    // Discover Spatial Memory agent
+    const memoryAgents = await this.discover({ capabilities: ['pattern-suggest'] });
+
+    if (memoryAgents.length === 0) {
+      console.log('[A2A] Spatial Memory not available');
+      return { suggestion: null };
+    }
+
+    const agent = memoryAgents[0];
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log('[A2A] Spatial Memory query timeout');
+        resolve({ suggestion: null });
+      }, 2000);
+
+      // One-time handler for response
+      const handler = (message: A2AMessage) => {
+        if (message.payload.requestId === requestId) {
+          clearTimeout(timeout);
+          this.offMessage('pattern-suggest-result', handler);
+          resolve({
+            suggestion: message.payload.suggestion,
+            patterns: message.payload.patterns,
+          });
+        }
+      };
+
+      this.onMessage('pattern-suggest-result', handler);
+
+      // Send query
+      this.sendMessage({
+        to: agent.id,
+        type: 'pattern-suggest',
+        payload: { objectType, userId: this.userId, requestId },
+      });
+    });
+  }
 }
 
 export const a2aService = new A2AServiceImpl();
