@@ -191,12 +191,28 @@ class A2AServiceImpl {
    * Validate object placement with Physics Arbiter
    */
   async validatePlacement(object: any): Promise<{ isValid: boolean; reason: string | null; collisions?: any[] }> {
+    // Input validation
+    if (!object || typeof object !== 'object') {
+      console.error('[A2A] Invalid object: must be an object');
+      return { isValid: false, reason: 'Invalid object data' };
+    }
+
+    if (!object.position || !Array.isArray(object.position) || object.position.length !== 3) {
+      console.error('[A2A] Invalid position: must be [x, y, z] array');
+      return { isValid: false, reason: 'Invalid position data' };
+    }
+
+    if (!object.type || typeof object.type !== 'string') {
+      console.error('[A2A] Invalid type: must be a string');
+      return { isValid: false, reason: 'Invalid object type' };
+    }
+
     // Discover Physics Arbiter
     const arbiters = await this.discover({ capabilities: ['placement-validate'] });
 
     if (arbiters.length === 0) {
-      console.warn('[A2A] No Physics Arbiter available, allowing placement');
-      return { isValid: true, reason: null };
+      console.warn('[A2A] ⚠️  Physics Arbiter unavailable - rejecting placement for safety');
+      return { isValid: false, reason: 'Physics validation unavailable' };
     }
 
     const arbiter = arbiters[0];
@@ -204,8 +220,8 @@ class A2AServiceImpl {
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.warn('[A2A] Validation timeout, allowing placement');
-        resolve({ isValid: true, reason: null });
+        console.warn('[A2A] ⚠️  Validation timeout - rejecting placement for safety');
+        resolve({ isValid: false, reason: 'Physics validation timeout' });
       }, 1000);
 
       // One-time handler for response
@@ -304,19 +320,71 @@ class A2AServiceImpl {
   }
 
   /**
+   * Verify message is from an authorized agent
+   */
+  private isAuthorizedMessage(message: A2AMessage): boolean {
+    // Check message has required fields
+    if (!message.from || !message.type || !message.payload) {
+      console.warn('[A2A] ⚠️  Invalid message structure');
+      return false;
+    }
+
+    // Ignore messages from self
+    if (message.from.includes(this.userId)) {
+      return false;
+    }
+
+    // Only accept messages from known agent patterns
+    const validPatterns = [
+      /^spatialos-user-/,     // User agents
+      /^physics-arbiter-/,    // Physics Arbiter
+      /^scene-sync-/,         // Scene Sync
+      /^spatial-memory-/,     // Spatial Memory
+    ];
+
+    const isValid = validPatterns.some(pattern => pattern.test(message.from));
+
+    if (!isValid) {
+      console.warn(`[A2A] ⚠️  Unauthorized agent: ${message.from}`);
+    }
+
+    return isValid;
+  }
+
+  /**
+   * Validate object data structure
+   */
+  private isValidObjectData(object: any): boolean {
+    if (!object || typeof object !== 'object') return false;
+    if (!object.type || typeof object.type !== 'string') return false;
+    if (!object.position || !Array.isArray(object.position) || object.position.length !== 3) return false;
+
+    // Validate position values are numbers
+    if (!object.position.every((n: any) => typeof n === 'number' && !isNaN(n))) return false;
+
+    return true;
+  }
+
+  /**
    * Set up handlers for Scene Sync broadcasts
    */
   private setupSceneSyncHandlers(): void {
     // Listen for objects created by other users
     this.onMessage('object-created', async (message: A2AMessage) => {
-      if (message.from.includes(this.userId)) {
-        return; // Ignore our own broadcasts
+      // Authorization check
+      if (!this.isAuthorizedMessage(message)) {
+        return;
       }
 
       console.log(`[A2A] 📥 Received object from ${message.from}`);
 
       const { object } = message.payload;
-      if (!object) return;
+
+      // Input validation
+      if (!this.isValidObjectData(object)) {
+        console.warn('[A2A] ⚠️  Invalid object data, ignoring');
+        return;
+      }
 
       // Add to local store
       const { useSpatialStore } = await import('../stores/spatialStore');
@@ -328,17 +396,35 @@ class A2AServiceImpl {
 
     // Listen for conflict resolutions from Scene Sync
     this.onMessage('conflict-resolved', (message: A2AMessage) => {
+      // Authorization check
+      if (!this.isAuthorizedMessage(message)) {
+        return;
+      }
+
       console.log('[A2A] ⚠️  Conflict resolved by Scene Sync:', message.payload.reason);
       // TODO: Update local state with resolved version
     });
 
     // Listen for object updates from Scene Sync
     this.onMessage('object-updated', async (message: A2AMessage) => {
-      if (message.from.includes(this.userId)) {
-        return; // Ignore our own updates
+      // Authorization check
+      if (!this.isAuthorizedMessage(message)) {
+        return;
       }
 
       const { objectId, updates } = message.payload;
+
+      // Input validation
+      if (!objectId || typeof objectId !== 'string') {
+        console.warn('[A2A] ⚠️  Invalid objectId in update');
+        return;
+      }
+
+      if (!updates || typeof updates !== 'object') {
+        console.warn('[A2A] ⚠️  Invalid updates in object-updated');
+        return;
+      }
+
       const { useSpatialStore } = await import('../stores/spatialStore');
       useSpatialStore.getState().updateObject(objectId, updates);
     });
