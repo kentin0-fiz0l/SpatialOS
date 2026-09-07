@@ -294,17 +294,40 @@ function App() {
 
         {/* Test Objects Button */}
         <button
-          onClick={() => {
-            import('./services/a2aService').then(({ a2aService }) => {
-              import('./stores/spatialStore').then(({ useSpatialStore }) => {
-                const store = useSpatialStore.getState();
-                // Create new objects at hand-reachable positions
-                // Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
-                store.addObject({ type: 'note', content: { text: 'Grab me!' }, position: [0, 0.5, -1.6], createdBy: 'hand' });
-                store.addObject({ type: 'timer', content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 }, position: [0.6, 0.5, -1.6], createdBy: 'hand' });
-                store.addObject({ type: 'widget', content: { widgetType: 'clock' }, position: [-0.6, 0.5, -1.6], createdBy: 'hand' });
-              });
-            });
+          onClick={async () => {
+            const { a2aService } = await import('./services/a2aService');
+
+            console.log('[App] Creating test objects with Physics Arbiter validation...');
+
+            // Create objects with validation - Hand reaches: X=[-1, 1], Y=[0, 0.9], Z=[-1.5, -1.8]
+            const results = await Promise.all([
+              a2aService.createValidatedObject({
+                type: 'note',
+                content: { text: 'Validated!' },
+                position: [0, 0.5, -1.6],
+                createdBy: 'hand'
+              }),
+              a2aService.createValidatedObject({
+                type: 'timer',
+                content: { duration: 30, label: 'Test', startTime: Date.now(), remainingTime: 30 },
+                position: [0.6, 0.5, -1.6],
+                createdBy: 'hand'
+              }),
+              a2aService.createValidatedObject({
+                type: 'widget',
+                content: { widgetType: 'clock' },
+                position: [-0.6, 0.5, -1.6],
+                createdBy: 'hand'
+              }),
+            ]);
+
+            const successful = results.filter(r => r.success).length;
+            const failed = results.filter(r => !r.success);
+
+            console.log(`[App] ✅ Created ${successful}/3 objects`);
+            if (failed.length > 0) {
+              failed.forEach(f => console.warn(`[App] ❌ Failed: ${f.reason}`));
+            }
           }}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
         >

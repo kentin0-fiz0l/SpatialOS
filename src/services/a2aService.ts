@@ -67,6 +67,9 @@ class A2AServiceImpl {
             } as AgentCard,
           });
 
+          // Set up Scene Sync handlers
+          this.setupSceneSyncHandlers();
+
           resolve();
         };
 
@@ -187,7 +190,7 @@ class A2AServiceImpl {
   /**
    * Validate object placement with Physics Arbiter
    */
-  async validatePlacement(object: any): Promise<{ isValid: boolean; reason: string | null }> {
+  async validatePlacement(object: any): Promise<{ isValid: boolean; reason: string | null; collisions?: any[] }> {
     // Discover Physics Arbiter
     const arbiters = await this.discover({ capabilities: ['placement-validate'] });
 
@@ -213,6 +216,7 @@ class A2AServiceImpl {
           resolve({
             isValid: message.payload.isValid,
             reason: message.payload.reason,
+            collisions: message.payload.collisions,
           });
         }
       };
@@ -226,6 +230,38 @@ class A2AServiceImpl {
         payload: { object, requestId },
       });
     });
+  }
+
+  /**
+   * Create object with Physics Arbiter validation and Scene Sync coordination
+   */
+  async createValidatedObject(objectData: any): Promise<{ success: boolean; id?: string; reason?: string }> {
+    // Validate with Physics Arbiter
+    const validation = await this.validatePlacement(objectData);
+
+    if (!validation.isValid) {
+      console.warn(`[A2A] ❌ Object placement rejected: ${validation.reason}`);
+      return { success: false, reason: validation.reason || 'Invalid placement' };
+    }
+
+    console.log('[A2A] ✅ Placement validated by Physics Arbiter');
+
+    // Import dynamically to avoid circular dependency
+    const { useSpatialStore } = await import('../stores/spatialStore');
+    const id = useSpatialStore.getState().addObject(objectData);
+
+    // Notify Scene Sync of object creation
+    await this.sendMessage({
+      type: 'object-created',
+      payload: {
+        object: { ...objectData, id },
+        userId: this.userId,
+      },
+    });
+
+    console.log(`[A2A] 📤 Notified Scene Sync of object creation: ${id}`);
+
+    return { success: true, id };
   }
 
   private handleMessage(message: any): void {
@@ -265,6 +301,49 @@ class A2AServiceImpl {
     }
 
     return userId;
+  }
+
+  /**
+   * Set up handlers for Scene Sync broadcasts
+   */
+  private setupSceneSyncHandlers(): void {
+    // Listen for objects created by other users
+    this.onMessage('object-created', async (message: A2AMessage) => {
+      if (message.from.includes(this.userId)) {
+        return; // Ignore our own broadcasts
+      }
+
+      console.log(`[A2A] 📥 Received object from ${message.from}`);
+
+      const { object } = message.payload;
+      if (!object) return;
+
+      // Add to local store
+      const { useSpatialStore } = await import('../stores/spatialStore');
+      useSpatialStore.getState().addObject({
+        ...object,
+        createdBy: 'peer',
+      });
+    });
+
+    // Listen for conflict resolutions from Scene Sync
+    this.onMessage('conflict-resolved', (message: A2AMessage) => {
+      console.log('[A2A] ⚠️  Conflict resolved by Scene Sync:', message.payload.reason);
+      // TODO: Update local state with resolved version
+    });
+
+    // Listen for object updates from Scene Sync
+    this.onMessage('object-updated', async (message: A2AMessage) => {
+      if (message.from.includes(this.userId)) {
+        return; // Ignore our own updates
+      }
+
+      const { objectId, updates } = message.payload;
+      const { useSpatialStore } = await import('../stores/spatialStore');
+      useSpatialStore.getState().updateObject(objectId, updates);
+    });
+
+    console.log('[A2A] 📡 Scene Sync handlers registered');
   }
 }
 
