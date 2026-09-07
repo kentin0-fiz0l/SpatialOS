@@ -12,6 +12,7 @@ export type VoiceCommand =
   | { type: 'create_widget'; widgetType: string }
   | { type: 'delete_all' }
   | { type: 'remember_location'; label: string; description?: string }
+  | { type: 'ask_ai'; question: string }
   | { type: 'unknown'; rawText: string };
 
 /**
@@ -173,6 +174,12 @@ export class VoiceService {
       if (label && label !== 'this' && label !== 'here' && label.length > 1) {
         return { type: 'remember_location', label };
       }
+    }
+
+    // Ask AI: "ask AI <question>" or "hey AI <question>"
+    const askAIMatch = lower.match(/(?:ask|hey|talk to)\s+(?:the\s+)?(?:ai|assistant)\s+(.+)/);
+    if (askAIMatch) {
+      return { type: 'ask_ai', question: askAIMatch[1].trim() };
     }
 
     // Unknown command

@@ -156,11 +156,130 @@ function App() {
         break;
       }
 
+      case 'ask_ai': {
+        console.log('[App] Ask AI:', command.question);
+        handleAskAI(command.question);
+        break;
+      }
+
       case 'unknown':
         console.warn('[App] Unknown voice command:', command.rawText);
         voiceStore.setError(`Unknown command: "${command.rawText}"`);
         setTimeout(() => voiceStore.setError(null), 3000);
         break;
+    }
+  };
+
+  // Handle "Ask AI" command
+  const handleAskAI = async (question: string) => {
+    const store = useSpatialStore.getState();
+
+    // Find avatar
+    const avatar = store.getAllObjects().find(obj => obj.type === 'avatar');
+    if (!avatar) {
+      console.warn('[App] No avatar found - spawn one first');
+      useVoiceStore.getState().setError('No AI avatar found. Click "Spawn AI Avatar" first.');
+      setTimeout(() => useVoiceStore.getState().setError(null), 3000);
+      return;
+    }
+
+    // Update avatar state to thinking
+    store.updateObject(avatar.id, {
+      content: {
+        ...avatar.content,
+        state: 'thinking',
+      },
+    });
+
+    try {
+      // Build spatial context (objects within 5m of avatar)
+      const nearbyObjects = store.getAllObjects()
+        .filter(obj => obj.type !== 'avatar' && obj.visible)
+        .filter(obj => {
+          const dx = obj.position[0] - avatar.position[0];
+          const dy = obj.position[1] - avatar.position[1];
+          const dz = obj.position[2] - avatar.position[2];
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          return distance < 5; // Within 5 meters
+        });
+
+      // Build context-aware prompt
+      const context = nearbyObjects.length > 0
+        ? `Nearby objects:\n${nearbyObjects.map(obj => {
+            const content = obj.content as any;
+            const desc = content.text || content.label || content.widgetType || obj.type;
+            return `- ${obj.type}: "${desc}"`;
+          }).join('\n')}`
+        : 'No nearby objects.';
+
+      const prompt = `You are a helpful spatial computing assistant existing as a 3D avatar in the user's space.
+
+${context}
+
+User question: "${question}"
+
+Respond naturally and reference specific objects when relevant. Keep responses under 50 words.`;
+
+      console.log('[App] Querying Ollama with context...');
+
+      // Query Ollama
+      const response = await ollamaService.query(prompt);
+
+      console.log('[App] Ollama response:', response);
+
+      // Update avatar state to speaking with response
+      store.updateObject(avatar.id, {
+        content: {
+          ...avatar.content,
+          state: 'speaking',
+          currentResponse: response,
+          conversationHistory: [
+            ...(avatar.content as any).conversationHistory,
+            { role: 'user', content: question, timestamp: Date.now() },
+            { role: 'assistant', content: response, timestamp: Date.now() },
+          ],
+        },
+      });
+
+      // Auto-hide response after 15 seconds
+      setTimeout(() => {
+        const currentAvatar = store.getObject(avatar.id);
+        if (currentAvatar && (currentAvatar.content as any).state === 'speaking') {
+          store.updateObject(avatar.id, {
+            content: {
+              ...currentAvatar.content,
+              state: 'idle',
+              currentResponse: undefined,
+            },
+          });
+        }
+      }, 15000);
+
+    } catch (error) {
+      console.error('[App] Ollama query failed:', error);
+
+      // Show error in avatar
+      store.updateObject(avatar.id, {
+        content: {
+          ...avatar.content,
+          state: 'speaking',
+          currentResponse: 'Sorry, I encountered an error. Is Ollama running?',
+        },
+      });
+
+      // Return to idle after 5 seconds
+      setTimeout(() => {
+        const currentAvatar = store.getObject(avatar.id);
+        if (currentAvatar) {
+          store.updateObject(avatar.id, {
+            content: {
+              ...currentAvatar.content,
+              state: 'idle',
+              currentResponse: undefined,
+            },
+          });
+        }
+      }, 5000);
     }
   };
 
