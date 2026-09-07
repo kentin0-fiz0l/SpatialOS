@@ -19,6 +19,8 @@ import HandCursor from './HandCursor';
 import MemoryMarker from './MemoryMarker';
 import AIResponseBubble from '../UI/AIResponseBubble';
 import ParticleEffects from './ParticleEffects';
+import Avatar3D from './Avatar3D';
+import type { AvatarContent } from '../../types/spatial.types';
 
 /**
  * Scene content (must be inside Canvas)
@@ -83,9 +85,18 @@ function SceneContent() {
           </mesh>
         </RigidBody>
 
-        {/* Render spatial objects */}
-        {objects.map((obj) => (
+        {/* Render spatial objects (excluding avatars) */}
+        {objects.filter(obj => obj.type !== 'avatar').map((obj) => (
           <SpatialObject key={obj.id} object={obj} />
+        ))}
+
+        {/* Render AI avatars (outside physics for smooth animation) */}
+        {objects.filter(obj => obj.type === 'avatar').map((obj) => (
+          <Avatar3D
+            key={obj.id}
+            position={obj.position}
+            content={obj.content as AvatarContent}
+          />
         ))}
 
         {/* Hand cursors */}

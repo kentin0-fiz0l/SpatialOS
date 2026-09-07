@@ -334,6 +334,38 @@ function App() {
         >
           ✨ Create Test Objects (Multi-User)
         </button>
+
+        {/* Spawn AI Avatar Button */}
+        <button
+          onClick={() => {
+            const store = useSpatialStore.getState();
+
+            // Check if avatar already exists
+            const existingAvatar = store.getAllObjects().find(obj => obj.type === 'avatar');
+            if (existingAvatar) {
+              console.log('[App] Avatar already exists');
+              return;
+            }
+
+            // Spawn avatar 2m in front of camera, at eye level
+            store.addObject({
+              type: 'avatar',
+              content: {
+                name: 'AI Assistant',
+                personality: 'helpful',
+                state: 'idle',
+                conversationHistory: [],
+              },
+              position: [0, 1.5, -2], // 2m in front, eye level
+              createdBy: 'voice',
+            });
+
+            console.log('[App] 🤖 AI Avatar spawned');
+          }}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+        >
+          🤖 Spawn AI Avatar
+        </button>
       </div>
 
       {/* Voice Indicator */}

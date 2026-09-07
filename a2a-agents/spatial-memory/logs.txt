@@ -1,0 +1,10 @@
+[Spatial Memory] Initializing...
+[A2A Client] ✅ Connected to discovery server
+[Spatial Memory] ✅ Connected to A2A discovery server
+[Spatial Memory] ✅ Message handlers registered
+[Spatial Memory] 🧠 Ready to remember spatial patterns
+[Spatial Memory] Press Ctrl+C to exit
+[Spatial Memory] 🎯 Pattern suggestion requested: note for 305bd606-c439-4206-8b6b-b7d21917e4df
+[Spatial Memory] ⚠️  No pattern found (need 3+ placements, have 0)
+[Spatial Memory] 🎯 Pattern suggestion requested: note for 305bd606-c439-4206-8b6b-b7d21917e4df
+[Spatial Memory] ⚠️  No pattern found (need 3+ placements, have 0)

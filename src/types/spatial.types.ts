@@ -4,7 +4,7 @@
  * All positions are in WiFi room coordinates (meters from room origin)
  */
 
-export type SpatialObjectType = 'note' | 'timer' | 'image' | 'widget' | 'tool';
+export type SpatialObjectType = 'note' | 'timer' | 'image' | 'widget' | 'tool' | 'avatar';
 
 export type Vector3 = [number, number, number];
 export type Quaternion = [number, number, number, number];
@@ -45,12 +45,26 @@ export interface ToolContent {
   command?: string;
 }
 
+export interface AvatarContent {
+  name: string;
+  personality: 'helpful' | 'casual' | 'professional';
+  state: 'idle' | 'thinking' | 'speaking';
+  currentResponse?: string;
+  conversationHistory: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: number;
+  }>;
+  targetObject?: string; // ID of object being looked at
+}
+
 export type SpatialObjectContent =
   | NoteContent
   | TimerContent
   | ImageContent
   | WidgetContent
-  | ToolContent;
+  | ToolContent
+  | AvatarContent;
 
 /**
  * Main spatial object interface
