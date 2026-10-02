@@ -1,0 +1,89 @@
+# Agents live on an internal network with no route out. The watchdog is the only
+# container on both sides, so every byte an agent sends goes through policy.
+#
+# ntfy sits on a separate control network shared only with the watchdog. Both human-facing
+# ports bind to 127.0.0.1; `tailscale serve` exposes them to your tailnet over HTTPS
+# (see README "Phone approvals"). Hostnames and the ntfy token come from .env.
+
+services:
+  watchdog:
+    build: .
+    volumes:
+      - ./watchdog.yaml:/config/watchdog.yaml:ro
+      - ./data:/app/data
+      - ./certs:/certs            # mitmproxy CA (generated on first start)
+    environment:
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+      WATCHDOG_PUBLIC_URL: ${WATCHDOG_PUBLIC_URL:-http://127.0.0.1:8765}
+    ports:
+      - "127.0.0.1:8765:8765"     # approval endpoint; never exposed on the agents network
+    depends_on:
+      ntfy:
+        condition: service_healthy
+    networks:
+      agents:
+        ipv4_address: 172.30.0.2
+      control:
+        ipv4_address: 172.31.0.2
+      egress: {}
+
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    command: ["serve"]
+    environment:
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://127.0.0.1:8091}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      # iOS can't hold a background connection to a self-hosted server, so ntfy.sh relays a
+      # wake-up ping (message ID only); the app then fetches the message from this server.
+      NTFY_UPSTREAM_BASE_URL: https://ntfy.sh
+    volumes:
+      - ./ntfy:/var/lib/ntfy
+    ports:
+      - "127.0.0.1:8091:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      control:
+        ipv4_address: 172.31.0.3
+      egress: {}
+
+  # Placeholder agent for smoke tests. Swap for the real agent runtime later.
+  scout:
+    image: curlimages/curl:latest
+    command: ["sleep", "infinity"]
+    depends_on:
+      watchdog:
+        condition: service_healthy
+    environment:
+      # Both spellings: curl ignores upper-case HTTP_PROXY, other tools ignore lower-case.
+      HTTP_PROXY: http://172.30.0.2:8080
+      HTTPS_PROXY: http://172.30.0.2:8080
+      http_proxy: http://172.30.0.2:8080
+      https_proxy: http://172.30.0.2:8080
+      # Trust the watchdog CA. Python: REQUESTS_CA_BUNDLE / SSL_CERT_FILE, Node: NODE_EXTRA_CA_CERTS.
+      CURL_CA_BUNDLE: /certs/mitmproxy-ca-cert.pem
+    volumes:
+      - ./certs/mitmproxy-ca-cert.pem:/certs/mitmproxy-ca-cert.pem:ro   # public cert only, not the CA key
+    networks:
+      agents:
+        ipv4_address: 172.30.0.10
+
+networks:
+  agents:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  control:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+  egress: {}

@@ -1,0 +1,3 @@
+mitmproxy>=12
+aiohttp>=3.9
+pyyaml>=6
