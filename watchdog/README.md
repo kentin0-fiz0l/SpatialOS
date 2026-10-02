@@ -103,11 +103,23 @@ Then:
 - If the notification fails, the request is denied.
 - Every decision goes to `data/audit.jsonl`.
 
+## Credentials
+
+Agents never hold real secrets. They send a placeholder (`x-api-key: injected-by-watchdog`);
+after a request passes every gate and rule, the watchdog overwrites the header with the real
+value from its own environment, and only for the hosts listed under `credentials` in
+`watchdog.yaml`. If a credential applies but its secret isn't set, the request is denied
+rather than forwarded with the placeholder.
+
+```bash
+# in watchdog/.env (gitignored), then: docker compose up -d
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
 ## Known gaps
 
 - WebSocket messages and non-HTTP TCP aren't inspected (the internal Docker network blocks other routes out).
 - Apps that pin certificates will fail through the proxy.
-- No credential injection yet: secrets still live in the agent.
 - No content-level risk scoring yet (planned: System One classifier on request bodies).
 
 ## Tests

@@ -5,6 +5,7 @@
 agents:
   "127.0.0.1": local-dev
   "172.30.0.10": scout
+  "172.30.0.11": researcher
 
 identity:
   # Appended to User-Agent on allowed requests so sites can tell an agent is acting.
@@ -38,6 +39,13 @@ blocked_destinations:
   - fe80::/10
   - 172.30.0.0/24     # agent network: no agent-to-agent traffic through the proxy
   - 172.31.0.0/24     # control network: ntfy (notifications carry approval tokens)
+
+# Secrets the watchdog adds to allowed requests. Agents send a placeholder and never hold
+# the real value. Values come from the watchdog's environment (watchdog/.env with Docker).
+credentials:
+  - hosts: [api.anthropic.com]
+    header: x-api-key
+    env: ANTHROPIC_API_KEY
 
 audit_log: data/audit.jsonl
 

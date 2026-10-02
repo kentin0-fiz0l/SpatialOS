@@ -14,6 +14,7 @@ services:
       - ./certs:/certs            # mitmproxy CA (generated on first start)
     environment:
       NTFY_TOKEN: ${NTFY_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}   # injected into agents' Claude API calls; agents never see it
       WATCHDOG_PUBLIC_URL: ${WATCHDOG_PUBLIC_URL:-http://127.0.0.1:8765}
     ports:
       - "127.0.0.1:8765:8765"     # approval endpoint; never exposed on the agents network
@@ -74,6 +75,28 @@ services:
     networks:
       agents:
         ipv4_address: 172.30.0.10
+
+  # Claude-powered research agent. See ../agent/agent.py.
+  #   docker compose exec researcher python agent.py "research X and write a summary"
+  researcher:
+    build: ../agent
+    depends_on:
+      watchdog:
+        condition: service_healthy
+    environment:
+      HTTP_PROXY: http://172.30.0.2:8080
+      HTTPS_PROXY: http://172.30.0.2:8080
+      http_proxy: http://172.30.0.2:8080
+      https_proxy: http://172.30.0.2:8080
+      SSL_CERT_FILE: /certs/mitmproxy-ca-cert.pem
+      ANTHROPIC_API_KEY: injected-by-watchdog   # placeholder; the watchdog swaps in the real key
+      AGENT_CONTACT: ${AGENT_CONTACT:-}   # optional, e.g. "mailto:you@example.com"; some sites ask bots for one
+    volumes:
+      - ./certs/mitmproxy-ca-cert.pem:/certs/mitmproxy-ca-cert.pem:ro
+      - ../agent/workspace:/workspace
+    networks:
+      agents:
+        ipv4_address: 172.30.0.11
 
 networks:
   agents:

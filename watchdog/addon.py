@@ -34,6 +34,7 @@ from mitmproxy.proxy import server_hooks
 
 from watchdog_proxy.approvals import ApprovalBroker, ConsoleNotifier, NtfyNotifier, build_app
 from watchdog_proxy.audit import AuditLog
+from watchdog_proxy.credentials import Credential, inject, load_credentials
 from watchdog_proxy.policy import Decision, Policy, RequestContext, Verdict, load_rules
 
 log = logging.getLogger("watchdog")
@@ -50,6 +51,7 @@ class Watchdog:
         self.agents: dict[str, str] = {}
         self.protected: set[str] = set()
         self.blocked_destinations: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+        self.credentials: list[Credential] = []
         self._pinned_hosts: dict[str, str] = {}  # server connection id -> hostname it was pinned from
         self.ua_suffix = ""
         self._runner: web.AppRunner | None = None
@@ -62,6 +64,7 @@ class Watchdog:
             cfg = yaml.safe_load(f)
 
         self.policy = Policy(load_rules(cfg.get("rules", [])))
+        self.credentials = load_credentials(cfg.get("credentials", []))
         self.audit = AuditLog(cfg.get("audit_log", "data/audit.jsonl"))
         self.agents = cfg.get("agents", {})
         self.ua_suffix = cfg.get("identity", {}).get("user_agent_suffix", "")
@@ -126,6 +129,9 @@ class Watchdog:
             if verdict.decision is Decision.ASK:
                 approved, why = await self.broker.request(ctx, self._summarize(flow))
                 verdict = Verdict(Decision.ALLOW if approved else Decision.DENY, why, verdict.rule)
+            # Secrets go in only after every gate and rule has passed.
+            if verdict.decision is Decision.ALLOW and (missing := inject(req.headers, ctx, self.credentials, os.environ)):
+                verdict = Verdict(Decision.DENY, missing, verdict.rule)
 
         self.audit.write(ctx, verdict)
         if verdict.decision is Decision.DENY:
