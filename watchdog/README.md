@@ -91,6 +91,8 @@ Hard gates run before any rule and can't be overridden by one:
 - The approval server and ntfy host are always denied to agents.
 - Destinations are resolved and refused if they land in `blocked_destinations` (loopback,
   link-local/cloud metadata, the agent subnet), however the host is spelled.
+  This is checked again on the connection itself, which is then pinned to the checked IP,
+  so a DNS server answering differently the second time (rebinding) can't redirect it.
 
 Then:
 
@@ -105,8 +107,6 @@ Then:
 
 - WebSocket messages and non-HTTP TCP aren't inspected (the internal Docker network blocks other routes out).
 - Apps that pin certificates will fail through the proxy.
-- DNS rebinding: the destination check resolves once and mitmproxy resolves again on connect.
-  The approval server is still covered by `untrusted_sources`; other internal services aren't.
 - No credential injection yet: secrets still live in the agent.
 - No content-level risk scoring yet (planned: System One classifier on request bodies).
 
