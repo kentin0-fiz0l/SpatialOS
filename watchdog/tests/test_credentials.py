@@ -36,6 +36,16 @@ def test_missing_secret_fails_closed():
     assert reason and "ANTHROPIC_API_KEY" in reason
 
 
+def test_optional_credential_skipped_when_unset():
+    creds = load_credentials([{"hosts": "api.anthropic.com", "header": "anthropic-workspace-id",
+                               "env": "ANTHROPIC_WORKSPACE_ID", "optional": True}])
+    headers = {}
+    assert inject(headers, ctx("api.anthropic.com"), creds, {}) is None
+    assert "anthropic-workspace-id" not in headers
+    assert inject(headers, ctx("api.anthropic.com"), creds, {"ANTHROPIC_WORKSPACE_ID": "wrkspc_1"}) is None
+    assert headers["anthropic-workspace-id"] == "wrkspc_1"
+
+
 def test_bad_config_names_the_entry():
     with pytest.raises(ValueError, match="credential 0"):
         load_credentials([{"hosts": "x"}])

@@ -15,6 +15,7 @@ services:
     environment:
       NTFY_TOKEN: ${NTFY_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}   # injected into agents' Claude API calls; agents never see it
+      ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}   # only for keys not scoped to a workspace
       WATCHDOG_PUBLIC_URL: ${WATCHDOG_PUBLIC_URL:-http://127.0.0.1:8765}
     ports:
       - "127.0.0.1:8765:8765"     # approval endpoint; never exposed on the agents network

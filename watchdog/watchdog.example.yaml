@@ -46,6 +46,11 @@ credentials:
   - hosts: [api.anthropic.com]
     header: x-api-key
     env: ANTHROPIC_API_KEY
+  # Only needed for keys not scoped to a workspace (the API then asks which one to bill).
+  - hosts: [api.anthropic.com]
+    header: anthropic-workspace-id
+    env: ANTHROPIC_WORKSPACE_ID
+    optional: true
 
 audit_log: data/audit.jsonl
 

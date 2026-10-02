@@ -22,6 +22,7 @@ class Credential:
     env: str  # watchdog env var holding the secret
     hosts: tuple[str, ...]
     agents: tuple[str, ...] = ("*",)
+    optional: bool = False  # skip silently when unset, instead of denying the request
 
     def applies_to(self, ctx: RequestContext) -> bool:
         return any(fnmatch.fnmatchcase(ctx.host, h) for h in self.hosts) and any(
@@ -40,6 +41,7 @@ def load_credentials(raw: list[dict[str, Any]]) -> list[Credential]:
                     env=entry["env"],
                     hosts=tuple(h.lower() for h in ([hosts] if isinstance(hosts, str) else hosts)),
                     agents=tuple([entry["agents"]] if isinstance(entry.get("agents"), str) else entry.get("agents", ["*"])),
+                    optional=bool(entry.get("optional", False)),
                 )
             )
         except KeyError as e:
@@ -56,12 +58,14 @@ def inject(
     """Overwrite headers for every credential that applies. Returns a deny reason, or None.
 
     A credential that applies but has no secret configured fails the request rather than
-    forwarding the agent's placeholder.
+    forwarding the agent's placeholder, unless it is marked optional.
     """
     for cred in creds:
         if not cred.applies_to(ctx):
             continue
         secret = environ.get(cred.env)
+        if not secret and cred.optional:
+            continue
         if not secret:
             return f"credential for {ctx.host} not configured (set {cred.env} for the watchdog)"
         headers[cred.header] = secret
