@@ -43,3 +43,46 @@ def test_activity_endpoint(tmp_path):
     assert status == 200 and bad == 400
     assert body["pending"] == []
     assert body["activity"][0]["host"] == "x.example" and body["activity"][0]["decision"] == "deny"
+
+
+def test_operator_decide(tmp_path):
+    from watchdog_proxy.policy import RequestContext as RC
+
+    class Capture:
+        def __init__(self):
+            self.sent = []
+
+        async def notify(self, req, base_url):
+            self.sent.append(req)
+
+    notifier = Capture()
+    broker = ApprovalBroker(notifier, "http://x", timeout_s=5)
+    app = build_app(broker, [], operator_key="secret-key")
+
+    async def main():
+        async with TestClient(TestServer(app)) as client:
+            hold = asyncio.create_task(broker.request(RC("scout", "POST", "x.example", "/send"), "s"))
+            while not notifier.sent:
+                await asyncio.sleep(0)
+            rid = notifier.sent[0].id
+            wrong = await client.post(f"/operator/decide/{rid}?decision=allow", headers={"X-Operator-Key": "nope"})
+            nokey = await client.post(f"/operator/decide/{rid}?decision=allow")
+            bad = await client.post(f"/operator/decide/{rid}?decision=maybe", headers={"X-Operator-Key": "secret-key"})
+            ok = await client.post(f"/operator/decide/{rid}?decision=deny", headers={"X-Operator-Key": "secret-key"})
+            again = await client.post(f"/operator/decide/{rid}?decision=allow", headers={"X-Operator-Key": "secret-key"})
+            approved, reason = await hold
+            return wrong.status, nokey.status, bad.status, ok.status, again.status, approved, reason
+
+    wrong, nokey, bad, ok, again, approved, reason = asyncio.run(main())
+    assert (wrong, nokey, bad, ok, again) == (403, 403, 400, 200, 404)
+    assert approved is False and reason == "denied by human"
+
+
+def test_operator_endpoint_disabled_without_key():
+    app = build_app(ApprovalBroker(ConsoleNotifier(), "http://x"), [])
+
+    async def main():
+        async with TestClient(TestServer(app)) as client:
+            return (await client.post("/operator/decide/abc?decision=allow", headers={"X-Operator-Key": ""})).status
+
+    assert asyncio.run(main()) == 403

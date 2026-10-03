@@ -121,6 +121,16 @@ rather than forwarded with the placeholder.
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+### Approving from the SpatialOS scene
+
+Besides the phone, the activity panel in SpatialOS has Approve/Deny buttons. They use an
+**operator key** the watchdog writes to `data/operator-key` on start (mode 600;
+`WATCHDOG_OPERATOR_KEY` pins it). The Vite dev server serves it to the page at
+`/operator-key`, loopback callers only, and the page sends it as `X-Operator-Key` on
+`POST /operator/decide/{id}`. Agents can reach none of those: the data dir is never mounted
+into agent containers, Vite is a LAN host the inventory doesn't list, and the approval
+server is control plane.
+
 The approval server listens on **8790** (not 8765, which the SpatialOS MCP voice bridge uses).
 
 ## Known gaps

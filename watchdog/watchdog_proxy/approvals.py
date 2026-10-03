@@ -105,6 +105,7 @@ class ApprovalBroker:
             self._pending.pop(req.id, None)
 
     def resolve(self, approval_id: str, token: str, approved: bool) -> bool:
+        """Decide with the per-request token (the link in the phone notification)."""
         entry = self._pending.get(approval_id)
         if entry is None:
             return False
@@ -112,6 +113,14 @@ class ApprovalBroker:
         if not secrets.compare_digest(req.token, token) or future.done():
             return False
         future.set_result(approved)
+        return True
+
+    def resolve_as_operator(self, approval_id: str, approved: bool) -> bool:
+        """Decide by id alone. Only for callers that already proved they hold the operator key."""
+        entry = self._pending.get(approval_id)
+        if entry is None or entry[1].done():
+            return False
+        entry[1].set_result(approved)
         return True
 
     def pending(self) -> list[dict]:
@@ -123,10 +132,12 @@ class ApprovalBroker:
         ]
 
 
-def build_app(broker: ApprovalBroker, untrusted_sources: list[str], audit=None) -> web.Application:
+def build_app(broker: ApprovalBroker, untrusted_sources: list[str], audit=None, operator_key: str | None = None) -> web.Application:
     """HTTP endpoint the human's phone hits. Refuses callers from agent networks.
 
-    `audit` (an AuditLog) enables GET /activity, the read-only feed for dashboards."""
+    `audit` (an AuditLog) enables GET /activity, the read-only feed for dashboards.
+    `operator_key` enables POST /operator/decide/{id}: a UI that holds the key (the SpatialOS
+    scene) can decide by id, without the per-request token that only ntfy delivers."""
     networks = [ipaddress.ip_network(cidr) for cidr in untrusted_sources]
 
     @web.middleware
@@ -149,6 +160,18 @@ def build_app(broker: ApprovalBroker, untrusted_sources: list[str], audit=None) 
     async def pending(_: web.Request) -> web.Response:
         return web.json_response(broker.pending())
 
+    async def operator_decide(request: web.Request) -> web.Response:
+        presented = request.headers.get("X-Operator-Key", "")
+        if not operator_key or not secrets.compare_digest(presented, operator_key):
+            log.warning("operator decide with bad key from %s", request.remote)
+            raise web.HTTPForbidden(text="bad operator key")
+        decision = request.query.get("decision")
+        if decision not in ("allow", "deny"):
+            raise web.HTTPBadRequest(text="decision must be allow or deny")
+        if not broker.resolve_as_operator(request.match_info["id"], decision == "allow"):
+            raise web.HTTPNotFound(text="unknown, expired, or already decided")
+        return web.json_response({"ok": True, "decision": decision})
+
     async def healthz(_: web.Request) -> web.Response:
         return web.json_response({"ok": True})
 
@@ -164,6 +187,7 @@ def build_app(broker: ApprovalBroker, untrusted_sources: list[str], audit=None) 
     app = web.Application(middlewares=[reject_agents])
     app.add_routes([
         web.post("/decide/{id}", decide),
+        web.post("/operator/decide/{id}", operator_decide),
         web.get("/pending", pending),
         web.get("/activity", activity),
         web.get("/healthz", healthz),

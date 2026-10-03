@@ -24,6 +24,7 @@ import ipaddress
 import json
 import logging
 import os
+import secrets
 import shutil
 import socket
 from urllib.parse import urlsplit
@@ -105,7 +106,15 @@ class Watchdog:
             os.makedirs(public_dir, exist_ok=True)
             shutil.copyfile(src, os.path.join(public_dir, "mitmproxy-ca-cert.pem"))
 
-        app = build_app(self.broker, appr.get("untrusted_sources", []), audit=self.audit)
+        # Operator key: lets a UI on this machine (the SpatialOS scene) approve by id. Written
+        # to the data dir, which agents never see; Vite serves it to the page on loopback only.
+        operator_key = os.environ.get("WATCHDOG_OPERATOR_KEY") or secrets.token_urlsafe(32)
+        key_path = cfg.get("operator_key_file", "data/operator-key")
+        os.makedirs(os.path.dirname(key_path) or ".", exist_ok=True)
+        with open(os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            f.write(operator_key)
+
+        app = build_app(self.broker, appr.get("untrusted_sources", []), audit=self.audit, operator_key=operator_key)
         self._runner = web.AppRunner(app, access_log=None)  # access log would record approval tokens
         await self._runner.setup()
         host, port = appr.get("listen_host", "127.0.0.1"), appr.get("listen_port", 8790)
