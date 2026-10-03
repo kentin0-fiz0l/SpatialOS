@@ -5,7 +5,7 @@
  * Read-only: the approve/deny path stays on the phone until it has its own auth.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Html } from '@react-three/drei';
 import {
   useWatchdogStore,
@@ -59,6 +59,15 @@ export default function AgentActivityPanel({
   const connected = useWatchdogConnected();
   const runs = useAgentRuns();
   const startPolling = useWatchdogStore((s) => s.startPolling);
+  const decide = useWatchdogStore((s) => s.decide);
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [decideError, setDecideError] = useState<string | null>(null);
+
+  const onDecide = async (id: string, decision: 'allow' | 'deny') => {
+    setDeciding(id);
+    setDecideError(await decide(id, decision));
+    setDeciding(null);
+  };
 
   useEffect(() => startPolling(), [startPolling]);
 
@@ -112,9 +121,28 @@ export default function AgentActivityPanel({
                 <span>{p.age_s}s</span>
               </div>
               <div className="truncate text-amber-100/70">{shortPath(p.path, 60)}</div>
-              <div className="mt-1 text-[11px] text-amber-200/60">Approve or deny on your phone</div>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={deciding === p.id}
+                  onClick={() => void onDecide(p.id, 'allow')}
+                  className="rounded-md bg-emerald-500/90 px-3 py-1 font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={deciding === p.id}
+                  onClick={() => void onDecide(p.id, 'deny')}
+                  className="rounded-md bg-rose-500/80 px-3 py-1 font-semibold text-rose-50 hover:bg-rose-400 disabled:opacity-50"
+                >
+                  Deny
+                </button>
+                <span className="text-[11px] text-amber-200/60">or answer on your phone</span>
+              </div>
             </div>
           ))}
+          {decideError && <p className="mb-2 text-rose-300">Couldn't decide: {decideError}</p>}
 
           <table className="w-full border-separate border-spacing-y-0.5">
             <tbody>

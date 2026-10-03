@@ -47,11 +47,17 @@ interface WatchdogStoreState {
   connected: boolean;
   runnerConnected: boolean;
   lastError: string | null;
+  /** The watchdog operator key, fetched once from the dev server (loopback only). Null = can't approve from here. */
+  operatorKey: string | null;
   refresh: () => Promise<void>;
+  decide: (id: string, decision: 'allow' | 'deny') => Promise<string | null>;
   startPolling: (intervalMs?: number) => () => void;
 }
 
 const ACTIVITY_LIMIT = 40;
+const DOWN_RETRY_MS = 15_000; // a service that isn't running is polled gently, not every tick
+let watchdogDownSince = 0;
+let runnerDownSince = 0;
 
 export const useWatchdogStore = create<WatchdogStoreState>((set) => ({
   activity: [],
@@ -60,24 +66,60 @@ export const useWatchdogStore = create<WatchdogStoreState>((set) => ({
   connected: false,
   runnerConnected: false,
   lastError: null,
+  operatorKey: null,
+
+  decide: async (id, decision) => {
+    let key = useWatchdogStore.getState().operatorKey;
+    if (!key) {
+      try {
+        const res = await fetch('/operator-key', { cache: 'no-store' });
+        if (!res.ok) return `no operator key (${res.status})`;
+        key = ((await res.json()) as { token: string }).token;
+        set({ operatorKey: key });
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    }
+    try {
+      const res = await fetch(`/watchdog/operator/decide/${encodeURIComponent(id)}?decision=${decision}`, {
+        method: 'POST',
+        headers: { 'X-Operator-Key': key },
+      });
+      if (res.status === 403) set({ operatorKey: null }); // key rotated: refetch next time
+      if (!res.ok) return await res.text();
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    await useWatchdogStore.getState().refresh();
+    return null;
+  },
 
   refresh: async () => {
-    try {
-      const res = await fetch(`/watchdog/activity?limit=${ACTIVITY_LIMIT}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { activity: AuditRecord[]; pending: PendingApproval[] };
-      set({ activity: data.activity, pending: data.pending, connected: true, lastError: null });
-    } catch (error) {
-      set({ connected: false, lastError: error instanceof Error ? error.message : String(error) });
+    const now = Date.now();
+    if (now - watchdogDownSince > DOWN_RETRY_MS) {
+      try {
+        const res = await fetch(`/watchdog/activity?limit=${ACTIVITY_LIMIT}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { activity: AuditRecord[]; pending: PendingApproval[] };
+        set({ activity: data.activity, pending: data.pending, connected: true, lastError: null });
+        watchdogDownSince = 0;
+      } catch (error) {
+        watchdogDownSince = now;
+        set({ connected: false, lastError: error instanceof Error ? error.message : String(error) });
+      }
     }
     // The runner is a separate host process and may be down independently of the watchdog.
-    try {
-      const res = await fetch('/runner/runs');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { runs: AgentRun[] };
-      set({ runs: data.runs, runnerConnected: true });
-    } catch {
-      set({ runnerConnected: false });
+    if (now - runnerDownSince > DOWN_RETRY_MS) {
+      try {
+        const res = await fetch('/runner/runs');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { runs: AgentRun[] };
+        set({ runs: data.runs, runnerConnected: true });
+        runnerDownSince = 0;
+      } catch {
+        runnerDownSince = now;
+        set({ runnerConnected: false });
+      }
     }
   },
 

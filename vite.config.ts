@@ -6,15 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MCP_TOKEN_FILE = process.env.MCP_TOKEN_FILE ?? path.join(here, 'mcp-server', '.mcp-token');
+const OPERATOR_KEY_FILE = process.env.WATCHDOG_OPERATOR_KEY_FILE ?? path.join(here, 'watchdog', 'data', 'operator-key');
 
 /**
- * Hands the page the MCP server's WebSocket token. The server writes it to a file on start;
- * serving it here means neither side needs configuration. Loopback callers only, since the
- * dev server listens on all interfaces (host: true).
+ * Hands the page a secret that a local service wrote to a file on start, so neither side
+ * needs configuration. Loopback callers only, since the dev server listens on all
+ * interfaces (host: true). Used for the MCP WebSocket token and the watchdog operator key.
  */
-function mcpToken(): Plugin {
+function localSecret(route: string, file: string, missing: string): Plugin {
   const attach = (server: ViteDevServer | PreviewServer) => {
-    server.middlewares.use('/mcp-token', (req, res) => {
+    server.middlewares.use(route, (req, res) => {
       const remote = req.socket.remoteAddress ?? '';
       if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
         res.statusCode = 403;
@@ -22,21 +23,25 @@ function mcpToken(): Plugin {
         return;
       }
       try {
-        const token = readFileSync(MCP_TOKEN_FILE, 'utf8').trim();
+        const token = readFileSync(file, 'utf8').trim();
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store');
         res.end(JSON.stringify({ token }));
       } catch {
         res.statusCode = 404;
-        res.end('MCP server not running (no token file)');
+        res.end(missing);
       }
     });
   };
-  return { name: 'mcp-token', configureServer: attach, configurePreviewServer: attach };
+  return { name: `local-secret${route}`, configureServer: attach, configurePreviewServer: attach };
 }
 
 export default defineConfig({
-  plugins: [react(), mcpToken()],
+  plugins: [
+    react(),
+    localSecret('/mcp-token', MCP_TOKEN_FILE, 'MCP server not running (no token file)'),
+    localSecret('/operator-key', OPERATOR_KEY_FILE, 'watchdog not running (no operator key file)'),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -13,6 +13,7 @@ import { useMCPStore } from '../stores/mcpStore';
 const WS_URL = 'ws://localhost:8765';
 const TOKEN_URL = '/mcp-token'; // served by the mcpToken plugin in vite.config.ts
 const RECONNECT_DELAY = 2000; // 2 seconds
+const SERVER_DOWN_RETRY = 10_000; // while the MCP server isn't running at all, poll gently
 const NOT_RUNNING_LOG_INTERVAL = 30_000; // don't spam the console while the server is down
 
 // Close codes from the server (mcp-server/lib.ts). Both mean "don't reconnect".
@@ -43,7 +44,7 @@ export class MCPClient {
           console.log(`[MCP Client] MCP server not running (${res.status} from ${TOKEN_URL}); will keep trying`);
           this.lastNotRunningLog = now;
         }
-        this.scheduleReconnect();
+        this.scheduleReconnect(SERVER_DOWN_RETRY);
         return;
       }
       token = ((await res.json()) as { token: string }).token;
@@ -100,7 +101,7 @@ export class MCPClient {
   /**
    * Schedule reconnection attempt
    */
-  private scheduleReconnect() {
+  private scheduleReconnect(delay = RECONNECT_DELAY) {
     if (this.reconnectTimer) {
       return;
     }
@@ -108,7 +109,7 @@ export class MCPClient {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
-    }, RECONNECT_DELAY);
+    }, delay);
   }
 
   /**
