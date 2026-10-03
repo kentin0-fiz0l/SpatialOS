@@ -15,6 +15,20 @@ class AuditLog:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    def tail(self, limit: int) -> list[dict]:
+        """The most recent `limit` records, oldest first. Reads the whole file; fine at this scale."""
+        try:
+            lines = self.path.read_text().splitlines()
+        except OSError:
+            return []
+        records = []
+        for line in lines[-limit:]:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue  # a partially written last line
+        return records
+
     def write(self, ctx: RequestContext, verdict: Verdict) -> None:
         record = {
             "ts": time.time(),

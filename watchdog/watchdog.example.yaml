@@ -13,9 +13,9 @@ identity:
 
 approvals:
   listen_host: 127.0.0.1
-  listen_port: 8765
+  listen_port: 8790
   # URL your phone uses to reach the approval server. WATCHDOG_PUBLIC_URL (in .env) overrides it.
-  public_url: http://127.0.0.1:8765
+  public_url: http://127.0.0.1:8790
   timeout_seconds: 300          # unanswered approvals are denied
   untrusted_sources:            # callers the approval endpoint refuses (except /healthz)
     - 172.30.0.0/24             # agent network

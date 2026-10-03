@@ -20,6 +20,7 @@ import MemoryMarker from './MemoryMarker';
 import AIResponseBubble from '../UI/AIResponseBubble';
 import ParticleEffects from './ParticleEffects';
 import Avatar3D from './Avatar3D';
+import AgentActivityPanel from './AgentActivityPanel';
 import type { AvatarContent } from '../../types/spatial.types';
 
 /**
@@ -115,6 +116,9 @@ function SceneContent() {
 
       {/* AI Response Bubble - floats in 3D space, independent of physics */}
       <AIResponseBubble />
+
+      {/* What the agent is doing: watchdog audit log and pending approvals */}
+      <AgentActivityPanel />
 
       {/* Particle Effects - visual feedback for hand interactions */}
       <ParticleEffects events={particleEvents} onEventComplete={removeParticleEvent} />
