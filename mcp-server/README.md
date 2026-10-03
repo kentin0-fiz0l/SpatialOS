@@ -66,9 +66,22 @@ node index.js
 ```
 
 The server will:
-1. Start WebSocket server on `ws://localhost:8765`
-2. Wait for browser connection
-3. Listen for MCP tool calls on stdin
+1. Start WebSocket server on `ws://localhost:8765` (loopback only)
+2. Write its connection token to `mcp-server/.mcp-token` (gitignored, mode 600)
+3. Wait for browser connection
+4. Listen for MCP tool calls on stdin
+
+### How the browser authenticates
+
+The WebSocket only accepts pages served from this machine (`Origin` must be a loopback
+host) that present the token. No configuration is needed: the server writes the token to
+`.mcp-token` on start, the Vite dev server serves it at `/mcp-token` to loopback callers
+(see `mcpToken()` in `vite.config.ts`), and the page fetches it before connecting. Restart
+either side and they re-pair. `MCP_AUTH_TOKEN` pins the token and `MCP_TOKEN_FILE` moves
+the file; the token is never printed to the log.
+
+One tab drives the scene. Opening a second tab takes over; the first stays disconnected
+until reloaded.
 
 ### Running with voice-harness
 
@@ -124,8 +137,14 @@ pnpm watch      # Auto-rebuild on changes
 
 ## Ports
 
-- **WebSocket**: `localhost:8765` - Browser connection
+- **WebSocket**: `localhost:8765` - Browser connection (the watchdog's approval server uses 8790)
 - **stdio**: MCP transport for voice-harness
+
+## Tests
+
+```bash
+cd mcp-server && npm test
+```
 
 ## Dependencies
 
