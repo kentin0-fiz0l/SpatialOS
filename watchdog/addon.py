@@ -7,6 +7,7 @@ Order of checks per request:
      - client IP not registered under `agents` -> denied
      - control plane (approval server, ntfy) -> denied
      - destination resolves into `blocked_destinations` (loopback, metadata, agent net) -> denied
+     - destination is a LAN address not listed in the device inventory -> denied
   2. policy rules -> allow / deny / ask
   3. ask -> hold the request until a human approves, denies, or it times out
 
@@ -35,6 +36,7 @@ from mitmproxy.proxy import server_hooks
 from watchdog_proxy.approvals import ApprovalBroker, ConsoleNotifier, NtfyNotifier, build_app
 from watchdog_proxy.audit import AuditLog
 from watchdog_proxy.credentials import Credential, inject, load_credentials
+from watchdog_proxy.devices import Inventory, load_devices
 from watchdog_proxy.policy import Decision, Policy, RequestContext, Verdict, load_rules
 
 log = logging.getLogger("watchdog")
@@ -52,12 +54,14 @@ class Watchdog:
         self.protected: set[str] = set()
         self.blocked_destinations: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
         self.credentials: list[Credential] = []
+        self.inventory = Inventory([])
         self._pinned_hosts: dict[str, str] = {}  # server connection id -> hostname it was pinned from
         self.ua_suffix = ""
         self._runner: web.AppRunner | None = None
 
     def load(self, loader):
         loader.add_option("watchdog_config", str, "watchdog.yaml", "Path to the watchdog YAML config.")
+        loader.add_option("watchdog_devices", str, "", "Path to the device inventory YAML (optional).")
 
     async def running(self):
         with open(mitm_ctx.options.watchdog_config) as f:
@@ -65,6 +69,10 @@ class Watchdog:
 
         self.policy = Policy(load_rules(cfg.get("rules", [])))
         self.credentials = load_credentials(cfg.get("credentials", []))
+        if path := mitm_ctx.options.watchdog_devices:
+            with open(path) as f:
+                self.inventory = Inventory(load_devices((yaml.safe_load(f) or {}).get("devices", [])))
+            self.credentials += self.inventory.credentials()
         self.audit = AuditLog(cfg.get("audit_log", "data/audit.jsonl"))
         self.agents = cfg.get("agents", {})
         self.ua_suffix = cfg.get("identity", {}).get("user_agent_suffix", "")
@@ -94,8 +102,8 @@ class Watchdog:
         await self._runner.setup()
         host, port = appr.get("listen_host", "127.0.0.1"), appr.get("listen_port", 8765)
         await web.TCPSite(self._runner, host, port).start()
-        log.info("watchdog ready: %d rules, approvals on %s:%s, notifier=%s",
-                 len(self.policy.rules), host, port, type(notifier).__name__)
+        log.info("watchdog ready: %d rules, %d devices, approvals on %s:%s, notifier=%s",
+                 len(self.policy.rules), len(self.inventory.devices), host, port, type(notifier).__name__)
 
     async def done(self):
         if self._runner:
@@ -129,6 +137,7 @@ class Watchdog:
             if verdict.decision is Decision.ASK:
                 approved, why = await self.broker.request(ctx, self._summarize(flow))
                 verdict = Verdict(Decision.ALLOW if approved else Decision.DENY, why, verdict.rule)
+                flow.metadata["watchdog_held"] = True
             # Secrets go in only after every gate and rule has passed.
             if verdict.decision is Decision.ALLOW and (missing := inject(req.headers, ctx, self.credentials, os.environ)):
                 verdict = Verdict(Decision.DENY, missing, verdict.rule)
@@ -143,6 +152,11 @@ class Watchdog:
         elif self.ua_suffix:
             # Identify as an agent honestly; sites blocking unidentified agents is a real failure mode.
             req.headers["User-Agent"] = f"{req.headers.get('User-Agent', '')} {self.ua_suffix}".strip()
+
+    def response(self, flow: http.HTTPFlow):
+        # Let the agent see that a human approved this one; a held request otherwise looks like a plain allow.
+        if flow.metadata.get("watchdog_held") and flow.response:
+            flow.response.headers["X-Watchdog-Decision"] = "approved"
 
     def _is_protected(self, host: str, port: int) -> bool:
         return host in self.protected or f"{host}:{port}" in self.protected
@@ -177,6 +191,8 @@ class Watchdog:
         for ip in ips:
             if any(ip in net for net in self.blocked_destinations):
                 return None, f"{host} resolves to blocked address {ip}"
+            if reason := self.inventory.blocks(ip):
+                return None, reason
         if not ips:
             return None, f"could not resolve {host}"
         return str(ips[0]), None

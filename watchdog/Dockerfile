@@ -9,4 +9,5 @@ EXPOSE 8080 8765
 HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/healthz')"
 CMD ["mitmdump", "-s", "addon.py", "--set", "watchdog_config=/config/watchdog.yaml", \
+     "--set", "watchdog_devices=/config/devices.yaml", \
      "--set", "confdir=/certs", "--listen-port", "8080", "--set", "flow_detail=0"]

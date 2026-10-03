@@ -21,6 +21,7 @@ echo "10 approvals via proxy, localtest.me:   $(SP http://localtest.me:8765/pend
 echo "11 approvals via proxy, 172.30.0.2:     $(SP http://172.30.0.2:8765/pending)"
 echo "12 cloud metadata 169.254.169.254:      $(SP http://169.254.169.254/latest/meta-data/)"
 echo "13 agent-to-agent (scout -> itself):    $(SP http://172.30.0.10:80/)"
+echo "13b LAN host not in inventory (the Mac):  $(SP http://192.168.1.74:8090/)"
 echo "14a ntfy via proxy (by name):          $(SP 'http://ntfy/watchdog-approvals/json?poll=1')"
 echo "14b ntfy via proxy (by IP):            $(SP 'http://172.31.0.3/watchdog-approvals/json?poll=1')"
 echo "14c ntfy direct, no proxy:             $(S --noproxy '*' http://172.31.0.3/)"

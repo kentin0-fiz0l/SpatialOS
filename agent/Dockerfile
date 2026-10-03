@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY agent.py .
+COPY skills ./skills
 USER agent
 ENV PYTHONUNBUFFERED=1
 # Idle until given a task: docker compose exec researcher python agent.py "..."

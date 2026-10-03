@@ -1,0 +1,27 @@
+# Copy to devices.yaml and edit. devices.yaml is gitignored (it maps your home network).
+#
+# The one source of truth for LAN devices. The watchdog reads it as an allowlist: any
+# private address NOT listed here is denied to agents. The agent reads it as its device
+# list (`list_devices`). `skill` names a directory under agent/skills/.
+#
+# `credential` adds a watchdog credential entry for the device: the agent sends
+# `injected-by-watchdog` in that header and the watchdog swaps in the value of `env`
+# (set it in watchdog/.env).
+
+devices:
+  - name: living-room-hue
+    skill: gadget-philips-hue-bridges
+    host: 192.168.1.50
+    notes: Square BSB002 bridge. Plain HTTP works for reads; CLIP v2 writes need HTTPS.
+    credential:
+      header: hue-application-key
+      env: HUE_APP_KEY
+
+  - name: office-printer
+    skill: gadget-brother-printers
+    host: 192.168.1.60
+
+  - name: voron
+    skill: gadget-moonraker-3d-printers
+    host: 192.168.1.70
+    notes: Moonraker on port 7125.

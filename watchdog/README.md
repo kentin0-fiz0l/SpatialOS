@@ -71,6 +71,8 @@ watchdog ──► ntfy (control net) ──wake-up ping, message ID only──�
 
 Run `./ntfy-setup.sh` with no argument for local-only testing (`127.0.0.1`). Without ntfy
 configured at all (`approvals.ntfy.url: ""`), approve/deny URLs print to the watchdog log.
+With ntfy running, `./decide.sh` lists held requests and `./decide.sh allow|deny` answers the
+latest one from this machine, the same way the phone does.
 
 **Agent HTTP timeouts must exceed `approvals.timeout_seconds`.** A held request is an open
 connection waiting for you; clients that give up after 30–60s will see a dropped connection
@@ -91,6 +93,9 @@ Hard gates run before any rule and can't be overridden by one:
 - The approval server and ntfy host are always denied to agents.
 - Destinations are resolved and refused if they land in `blocked_destinations` (loopback,
   link-local/cloud metadata, the agent subnet), however the host is spelled.
+- LAN addresses (10/8, 172.16/12, 192.168/16) are refused unless listed in the device
+  inventory (`devices.yaml`, see `devices.example.yaml`). The inventory is also where
+  per-device credentials live.
   This is checked again on the connection itself, which is then pinned to the checked IP,
   so a DNS server answering differently the second time (rebinding) can't redirect it.
 

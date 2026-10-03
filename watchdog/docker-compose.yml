@@ -10,6 +10,7 @@ services:
     build: .
     volumes:
       - ./watchdog.yaml:/config/watchdog.yaml:ro
+      - ./devices.yaml:/config/devices.yaml:ro
       - ./data:/app/data
       - ./certs:/certs            # mitmproxy CA (generated on first start)
     environment:
@@ -95,6 +96,7 @@ services:
     volumes:
       - ./certs/mitmproxy-ca-cert.pem:/certs/mitmproxy-ca-cert.pem:ro
       - ../agent/workspace:/workspace
+      - ./devices.yaml:/config/devices.yaml:ro
     networks:
       agents:
         ipv4_address: 172.30.0.11
