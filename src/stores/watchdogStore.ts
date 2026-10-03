@@ -38,12 +38,23 @@ export interface AgentRun {
   ended: number | null;
   exit_code: number | null;
   summary: string;
+  routine: string | null;
+}
+
+export interface RoutineInfo {
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  last_run: string | null;
+  next_run: string | null;
+  running: boolean;
 }
 
 interface WatchdogStoreState {
   activity: AuditRecord[];
   pending: PendingApproval[];
   runs: AgentRun[];
+  routines: RoutineInfo[];
   connected: boolean;
   runnerConnected: boolean;
   lastError: string | null;
@@ -63,6 +74,7 @@ export const useWatchdogStore = create<WatchdogStoreState>((set) => ({
   activity: [],
   pending: [],
   runs: [],
+  routines: [],
   connected: false,
   runnerConnected: false,
   lastError: null,
@@ -114,7 +126,9 @@ export const useWatchdogStore = create<WatchdogStoreState>((set) => ({
         const res = await fetch('/runner/runs');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { runs: AgentRun[] };
-        set({ runs: data.runs, runnerConnected: true });
+        const rr = await fetch('/runner/routines');
+        const routines = rr.ok ? ((await rr.json()) as { routines: RoutineInfo[] }).routines : [];
+        set({ runs: data.runs, routines, runnerConnected: true });
         runnerDownSince = 0;
       } catch {
         runnerDownSince = now;
@@ -135,3 +149,4 @@ export const useWatchdogActivity = () => useWatchdogStore((s) => s.activity);
 export const useWatchdogPending = () => useWatchdogStore((s) => s.pending);
 export const useWatchdogConnected = () => useWatchdogStore((s) => s.connected);
 export const useAgentRuns = () => useWatchdogStore((s) => s.runs);
+export const useRoutines = () => useWatchdogStore((s) => s.routines);

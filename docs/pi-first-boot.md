@@ -98,6 +98,22 @@ cp devices.example.yaml devices.yaml      # then edit; empty `devices: []` is fi
     -X POST -d x https://gmail.googleapis.com/gmail/v1/users/me/messages/send
   ```
 
+### Agent runner as a service
+
+The runner starts agent runs (by voice, from the activity panel) and fires routines on a
+schedule. It runs on the Pi itself, not in a container:
+
+```sh
+cd ~/SpatialOS
+cp agent/routines.example.toml agent/routines.toml     # edit: enable what you want
+sudo cp agent/spatialos-runner@.service /etc/systemd/system/
+sudo systemctl enable --now spatialos-runner@$USER
+curl -s localhost:8791/routines
+```
+
+- [ ] `systemctl status spatialos-runner@$USER` shows active; `/routines` lists your routines
+      with `next_run` times.
+
 ### First agent run on the hub
 
 ```sh

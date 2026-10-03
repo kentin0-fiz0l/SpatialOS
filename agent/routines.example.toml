@@ -1,0 +1,17 @@
+# Copy to routines.toml (gitignored) and edit. The runner re-reads it every 30s.
+# Schedules: "daily HH:MM", "weekly <mon..sun> HH:MM", "every <N>m|h|d" (minimum 5m).
+# Times are local to the machine running the runner. Each routine's last start is
+# remembered in runs/routines-state.json, so a restart doesn't re-fire it.
+
+[[routine]]
+name = "morning-brief"
+schedule = "daily 07:00"
+goal = """Write today's morning brief to briefs/<today's date>.md. Cover: the weather forecast
+for Campbell, CA today; the top 3 technology stories from the last 24 hours (one line each,
+with the URL); and anything new on the Klipper or Raspberry Pi blogs. Keep it under 250 words."""
+
+[[routine]]
+name = "printer-check"
+schedule = "every 6h"
+goal = "Report the Ender 3's state, temperatures and any queued or running job. If it is printing, note the progress."
+enabled = false   # turn on once the printer is in devices.yaml

@@ -13,6 +13,7 @@ import {
   useWatchdogPending,
   useWatchdogConnected,
   useAgentRuns,
+  useRoutines,
   type AuditRecord,
   type AgentRun,
 } from '../../stores/watchdogStore';
@@ -58,6 +59,7 @@ export default function AgentActivityPanel({
   const pending = useWatchdogPending();
   const connected = useWatchdogConnected();
   const runs = useAgentRuns();
+  const routines = useRoutines();
   const startPolling = useWatchdogStore((s) => s.startPolling);
   const decide = useWatchdogStore((s) => s.decide);
   const [deciding, setDeciding] = useState<string | null>(null);
@@ -73,6 +75,9 @@ export default function AgentActivityPanel({
 
   // Newest first, with held-then-decided requests reading as one event each.
   const recent = [...activity].reverse().slice(0, ROWS_SHOWN);
+  const nextRoutine = routines
+    .filter((r) => r.enabled && r.next_run)
+    .sort((a, b) => (a.next_run! < b.next_run! ? -1 : 1))[0];
   // Every run still going, plus the latest finished one so the result stays visible for a while.
   const shownRuns = [...runs.filter((r) => r.status === 'running'), ...runs.filter((r) => r.status !== 'running').slice(0, 1)];
 
@@ -98,7 +103,7 @@ export default function AgentActivityPanel({
             <div key={r.id} className={`mb-2 rounded-lg border px-3 py-2 ${RUN_STYLE[r.status]}`}>
               <div className="flex justify-between">
                 <span className="font-semibold">
-                  {r.status === 'running' ? 'Agent working' : `Agent ${r.status}`}
+                  {r.routine ? `Routine ${r.routine}` : 'Agent'} {r.status === 'running' ? 'working' : r.status}
                 </span>
                 <span className="opacity-70">{elapsed(r)}</span>
               </div>
@@ -143,6 +148,11 @@ export default function AgentActivityPanel({
             </div>
           ))}
           {decideError && <p className="mb-2 text-rose-300">Couldn't decide: {decideError}</p>}
+          {nextRoutine && (
+            <div className="mb-2 text-[11px] text-slate-500">
+              Next routine: {nextRoutine.name} ({nextRoutine.schedule}) at {nextRoutine.next_run!.replace('T', ' ')}
+            </div>
+          )}
 
           <table className="w-full border-separate border-spacing-y-0.5">
             <tbody>
