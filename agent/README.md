@@ -64,6 +64,28 @@ Who uses it:
 Output per run lands in `agent/runs/<id>.log`; the agent's own transcript is still in
 `agent/workspace/runs/`.
 
+## Routines: runs on a schedule
+
+`routines.toml` (copy `routines.example.toml`) lists agent runs the runner starts on its own:
+
+```toml
+[[routine]]
+name = "morning-brief"
+schedule = "daily 07:00"      # or "weekly mon 07:30", or "every 6h" (minimum 5m)
+goal = "Write today's brief to briefs/<date>.md ..."
+```
+
+The runner re-reads the file every 30 s, so edits apply without a restart; a bad entry rejects
+the whole file and is reported on `GET /routines` and in the log, with the last good set kept.
+A new routine waits for its first slot after it was added; one that has run before catches up
+a slot the runner missed (down at 07:00, back at 07:40) but never repeats one. State lives in
+`runs/routines-state.json`. `POST /routines/<name>/run` starts one now. A routine whose
+previous run is still going isn't started again. Routine runs show on the activity panel as
+"Routine <name>", and the panel lists the next one due.
+
+On the hub Pi the runner is a service: `agent/spatialos-runner@.service` (see
+`docs/pi-first-boot.md`).
+
 ## Settings (environment, set in watchdog/docker-compose.yml)
 
 | Variable | Default | |

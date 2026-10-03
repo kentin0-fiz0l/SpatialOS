@@ -1,0 +1,18 @@
+# systemd unit for the agent runner on the hub Pi.
+#   sudo cp agent/spatialos-runner.service /etc/systemd/system/
+#   sudo systemctl enable --now spatialos-runner
+# Edit User= and the paths if the repo isn't at /home/<user>/SpatialOS.
+[Unit]
+Description=SpatialOS agent runner (starts agent runs; schedules routines)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+User=%i
+WorkingDirectory=/home/%i/SpatialOS
+ExecStart=/usr/bin/python3 /home/%i/SpatialOS/agent/runner.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
