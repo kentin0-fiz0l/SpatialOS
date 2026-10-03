@@ -172,7 +172,70 @@ const TOOLS: Tool[] = [
       required: ['id'],
     },
   },
+  {
+    name: 'delegate_to_agent',
+    description:
+      'Hand a task to the personal agent, which works on its own in the background: web research, ' +
+      'writing summaries, controlling home devices. Returns a run id at once; the result arrives later. ' +
+      'Use for anything that takes more than a quick answer. The user watches progress on the activity ' +
+      'panel and approves sensitive actions on their phone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: {
+          type: 'string',
+          description: 'What the agent should do, in full, as the user said it (e.g. "research how DNS rebinding works and write a one-page summary")',
+        },
+      },
+      required: ['goal'],
+    },
+  },
+  {
+    name: 'agent_run_status',
+    description: 'Check on an agent run started with delegate_to_agent: whether it finished and what it reported.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        run_id: { type: 'string', description: 'The id returned by delegate_to_agent; omit for the most recent run' },
+      },
+    },
+  },
 ];
+
+// Agent runner (agent/runner.py), a host process on loopback.
+const RUNNER_URL = process.env.AGENT_RUNNER_URL || 'http://127.0.0.1:8791';
+const RUNNER_NOT_RUNNING = `Agent runner not reachable at ${RUNNER_URL}. Start it with: python3 agent/runner.py`;
+
+async function runnerFetch(path: string, init?: RequestInit): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch(`${RUNNER_URL}${path}`, { ...init, signal: AbortSignal.timeout(5000) });
+  } catch {
+    throw new Error(RUNNER_NOT_RUNNING);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `runner returned ${res.status}`);
+  return body;
+}
+
+interface RunInfo {
+  id: string;
+  goal: string;
+  status: string;
+  summary: string;
+  output?: string;
+}
+
+function describeRun(run: RunInfo): string {
+  if (run.status === 'running') return `Run ${run.id} is still working on: ${run.goal}`;
+  // The agent's final message is the last block of text before the "stopped:" line.
+  const lines = (run.output || '').split('\n');
+  let stop = lines.length;
+  for (let i = lines.length - 1; i >= 0; i--) if (lines[i].startsWith('stopped:')) { stop = i; break; }
+  const report = lines.slice(0, stop).filter((l) => l.startsWith('  ') && !l.startsWith('  →') && !l.startsWith('  ·'));
+  const tail = report.slice(-12).map((l) => l.trim()).join('\n');
+  return `Run ${run.id} ${run.status} (${run.summary || 'no summary'}).\nGoal: ${run.goal}\n\nAgent's report:\n${tail || '(no report)'}`;
+}
 
 // Send command to browser via WebSocket
 function sendToBrowser(command: any): Promise<any> {
@@ -346,6 +409,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'delegate_to_agent': {
+        const goal = String((args as any).goal ?? '').trim();
+        if (!goal) throw new Error('goal is required');
+        const started = await runnerFetch('/runs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal }),
+        });
+        return {
+          content: [{
+            type: 'text',
+            text: `Started agent run ${started.id}. It is working in the background; progress shows on the activity panel ` +
+              `and anything sensitive will ask for approval on the phone. Check back with agent_run_status.`,
+          }],
+        };
+      }
+
+      case 'agent_run_status': {
+        let runId = (args as any).run_id as string | undefined;
+        if (!runId) {
+          const { runs } = await runnerFetch('/runs');
+          if (!runs.length) return { content: [{ type: 'text', text: 'No agent runs yet.' }] };
+          runId = runs[0].id;
+        }
+        const run: RunInfo = await runnerFetch(`/runs/${encodeURIComponent(runId!)}`);
+        return { content: [{ type: 'text', text: describeRun(run) }] };
       }
 
       case 'create_spatial_image': {

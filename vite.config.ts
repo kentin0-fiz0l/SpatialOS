@@ -57,6 +57,11 @@ export default defineConfig({
         target: process.env.WATCHDOG_URL ?? 'http://127.0.0.1:8790',
         rewrite: (path) => path.replace(/^\/watchdog/, ''),
       },
+      // Agent runner (agent/runner.py), start/observe runs.
+      '/runner': {
+        target: process.env.AGENT_RUNNER_URL ?? 'http://127.0.0.1:8791',
+        rewrite: (path) => path.replace(/^\/runner/, ''),
+      },
     },
   },
   optimizeDeps: {

@@ -5,12 +5,13 @@
  */
 
 import { useState } from 'react';
+import { useMCPConnected } from '../../stores/mcpStore';
 import { useTrackingActive } from '../../stores/handStore';
 import { useObjectCount } from '../../stores/spatialStore';
 
 export default function StatusBar() {
   const [isVisible, setIsVisible] = useState(true);
-  const [mcpConnected, setMcpConnected] = useState(false); // TODO: Wire up MCP connection tracking
+  const mcpConnected = useMCPConnected();
   const trackingActive = useTrackingActive();
   const objectCount = useObjectCount();
 

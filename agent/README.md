@@ -42,6 +42,28 @@ Output streams to the terminal; results land in `agent/workspace/`, with a full 
 per run in `agent/workspace/runs/`. Exit code 0 means Claude finished; 2 means it stopped
 early (iteration limit, refusal, or max tokens).
 
+## Runner: start runs by voice or from the activity panel
+
+`runner.py` is a small host process (Mac today, the hub Pi later) that starts runs with
+`docker compose exec` and serves them over HTTP on loopback. It deliberately lives outside
+the containers: the agent network has no route out, and that stays true.
+
+```bash
+python3 agent/runner.py            # http://127.0.0.1:8791
+curl -s -X POST localhost:8791/runs -H 'Content-Type: application/json' -d '{"goal": "..."}'
+curl -s localhost:8791/runs        # newest first
+curl -s localhost:8791/runs/<id>   # status, summary, output
+```
+
+Who uses it:
+- The MCP voice bridge's `delegate_to_agent` and `agent_run_status` tools, so "research X
+  and write a summary" said to voice-harness starts a run and can report back.
+- The SpatialOS activity panel (via Vite's `/runner` proxy): running and finished runs show
+  next to the watchdog's audit log.
+
+Output per run lands in `agent/runs/<id>.log`; the agent's own transcript is still in
+`agent/workspace/runs/`.
+
 ## Settings (environment, set in watchdog/docker-compose.yml)
 
 | Variable | Default | |

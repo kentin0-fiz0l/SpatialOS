@@ -135,6 +135,14 @@ pnpm watch      # Auto-rebuild on changes
 }
 ```
 
+## Agent tools
+
+`delegate_to_agent(goal)` hands a task to the personal agent (`agent/`) through the runner
+(`python3 agent/runner.py`, loopback `:8791`, override with `AGENT_RUNNER_URL`). It returns
+at once with a run id; `agent_run_status(run_id?)` reports whether the run finished and what
+the agent said. Progress shows on the SpatialOS activity panel; sensitive actions are held by
+the watchdog for approval on the phone.
+
 ## Ports
 
 - **WebSocket**: `localhost:8765` - Browser connection (the watchdog's approval server uses 8790)
