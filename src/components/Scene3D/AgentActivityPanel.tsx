@@ -12,7 +12,9 @@ import {
   useWatchdogActivity,
   useWatchdogPending,
   useWatchdogConnected,
+  useAgentRuns,
   type AuditRecord,
+  type AgentRun,
 } from '../../stores/watchdogStore';
 
 const ROWS_SHOWN = 10;
@@ -25,6 +27,18 @@ const DECISION_STYLE: Record<AuditRecord['decision'], string> = {
 
 function shortPath(path: string, max = 28): string {
   return path.length > max ? `${path.slice(0, max - 1)}…` : path;
+}
+
+const RUN_STYLE: Record<AgentRun['status'], string> = {
+  running: 'border-sky-400/50 bg-sky-400/10 text-sky-100',
+  done: 'border-emerald-400/30 bg-emerald-400/5 text-emerald-100',
+  failed: 'border-rose-400/40 bg-rose-400/10 text-rose-100',
+  error: 'border-rose-400/40 bg-rose-400/10 text-rose-100',
+};
+
+function elapsed(run: AgentRun): string {
+  const secs = Math.round(((run.ended ?? Date.now() / 1000) - run.started));
+  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m${secs % 60}s`;
 }
 
 function timeOf(ts: number): string {
@@ -43,12 +57,15 @@ export default function AgentActivityPanel({
   const activity = useWatchdogActivity();
   const pending = useWatchdogPending();
   const connected = useWatchdogConnected();
+  const runs = useAgentRuns();
   const startPolling = useWatchdogStore((s) => s.startPolling);
 
   useEffect(() => startPolling(), [startPolling]);
 
   // Newest first, with held-then-decided requests reading as one event each.
   const recent = [...activity].reverse().slice(0, ROWS_SHOWN);
+  // Every run still going, plus the latest finished one so the result stays visible for a while.
+  const shownRuns = [...runs.filter((r) => r.status === 'running'), ...runs.filter((r) => r.status !== 'running').slice(0, 1)];
 
   return (
     <group position={position} rotation={rotation}>
@@ -67,6 +84,21 @@ export default function AgentActivityPanel({
           {!connected && (
             <p className="mb-3 text-slate-500">Watchdog not reachable. Is it running on :8790?</p>
           )}
+
+          {shownRuns.map((r) => (
+            <div key={r.id} className={`mb-2 rounded-lg border px-3 py-2 ${RUN_STYLE[r.status]}`}>
+              <div className="flex justify-between">
+                <span className="font-semibold">
+                  {r.status === 'running' ? 'Agent working' : `Agent ${r.status}`}
+                </span>
+                <span className="opacity-70">{elapsed(r)}</span>
+              </div>
+              <div className="truncate opacity-90" title={r.goal}>
+                {r.goal}
+              </div>
+              {r.summary && <div className="mt-0.5 truncate text-[11px] opacity-60">{r.summary}</div>}
+            </div>
+          ))}
 
           {pending.map((p) => (
             <div

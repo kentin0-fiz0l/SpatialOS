@@ -8,6 +8,7 @@
 import type { MCPCommand, MCPResponse, SpatialObjectContent } from '../types/spatial.types';
 import { useSpatialStore } from '../stores/spatialStore';
 import { usePositioningStore } from '../stores/positioningStore';
+import { useMCPStore } from '../stores/mcpStore';
 
 const WS_URL = 'ws://localhost:8765';
 const TOKEN_URL = '/mcp-token'; // served by the mcpToken plugin in vite.config.ts
@@ -58,6 +59,7 @@ export class MCPClient {
       this.ws.onopen = () => {
         console.log('[MCP Client] Connected to MCP server');
         this.isConnected = true;
+        useMCPStore.getState().setConnected(true);
 
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
@@ -68,6 +70,7 @@ export class MCPClient {
       this.ws.onclose = (event) => {
         console.log('[MCP Client] Disconnected from MCP server');
         this.isConnected = false;
+        useMCPStore.getState().setConnected(false);
 
         if (event.code === CLOSE_UNAUTHORIZED) {
           console.error(`[MCP Client] Server refused the connection: ${event.reason}. Open the app from http://localhost:5173.`);
