@@ -81,7 +81,7 @@ class Watchdog:
 
         appr = cfg.get("approvals", {})
         # Env wins so the tailnet hostname can live in .env next to the compose file.
-        public_url = os.environ.get("WATCHDOG_PUBLIC_URL") or appr.get("public_url", "http://127.0.0.1:8765")
+        public_url = os.environ.get("WATCHDOG_PUBLIC_URL") or appr.get("public_url", "http://127.0.0.1:8790")
         ntfy = appr.get("ntfy") or {}
         if ntfy.get("url"):
             notifier = NtfyNotifier(ntfy["url"], ntfy["topic"], os.environ.get(ntfy.get("token_env", "NTFY_TOKEN")))
@@ -105,10 +105,10 @@ class Watchdog:
             os.makedirs(public_dir, exist_ok=True)
             shutil.copyfile(src, os.path.join(public_dir, "mitmproxy-ca-cert.pem"))
 
-        app = build_app(self.broker, appr.get("untrusted_sources", []))
+        app = build_app(self.broker, appr.get("untrusted_sources", []), audit=self.audit)
         self._runner = web.AppRunner(app, access_log=None)  # access log would record approval tokens
         await self._runner.setup()
-        host, port = appr.get("listen_host", "127.0.0.1"), appr.get("listen_port", 8765)
+        host, port = appr.get("listen_host", "127.0.0.1"), appr.get("listen_port", 8790)
         await web.TCPSite(self._runner, host, port).start()
         log.info("watchdog ready: %d rules, %d devices, approvals on %s:%s, notifier=%s",
                  len(self.policy.rules), len(self.inventory.devices), host, port, type(notifier).__name__)

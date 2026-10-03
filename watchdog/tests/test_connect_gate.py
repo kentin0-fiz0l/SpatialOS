@@ -52,11 +52,11 @@ def connect(wd, host, port=443, sni=None):
 
 def test_rebinding_between_check_and_connect_is_blocked():
     wd = watchdog(answer(PUBLIC), answer("127.0.0.1"))
-    _, reason = asyncio.run(wd._resolve_allowed("rebind.example", 8765))
+    _, reason = asyncio.run(wd._resolve_allowed("rebind.example", 8790))
     assert reason is None  # request-time check sees the public answer...
-    server = connect(wd, "rebind.example", 8765)
+    server = connect(wd, "rebind.example", 8790)
     assert "127.0.0.1" in server.error  # ...but the connection is refused
-    assert server.address == ("rebind.example", 8765)
+    assert server.address == ("rebind.example", 8790)
 
 
 def test_allowed_connection_is_pinned_to_checked_ip():
@@ -97,7 +97,7 @@ def test_resolution_failure_blocks():
 def test_ipv4_mapped_ipv6_is_checked_as_ipv4():
     mapped = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:127.0.0.1", 0, 0, 0))]
     wd = watchdog(mapped)
-    server = connect(wd, "sneaky.example", 8765)
+    server = connect(wd, "sneaky.example", 8790)
     assert "127.0.0.1" in server.error
 
 

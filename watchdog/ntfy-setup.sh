@@ -30,7 +30,7 @@ if [[ -n $TAILNET_HOST ]]; then
   set_env WATCHDOG_PUBLIC_URL "https://$TAILNET_HOST:8443"
   if command -v tailscale >/dev/null; then
     tailscale serve --bg --https=443 http://127.0.0.1:8091
-    tailscale serve --bg --https=8443 http://127.0.0.1:8765
+    tailscale serve --bg --https=8443 http://127.0.0.1:8790
     echo "tailscale serve: https://$TAILNET_HOST -> ntfy, https://$TAILNET_HOST:8443 -> approvals"
   else
     echo "tailscale CLI not found; run the two 'tailscale serve' commands from the README yourself."
@@ -38,7 +38,7 @@ if [[ -n $TAILNET_HOST ]]; then
 else
   # Refresh local defaults, but keep tailnet URLs from an earlier run.
   [[ $(env_get NTFY_BASE_URL) == https://* ]] || set_env NTFY_BASE_URL "http://127.0.0.1:8091"
-  [[ $(env_get WATCHDOG_PUBLIC_URL) == https://* ]] || set_env WATCHDOG_PUBLIC_URL "http://127.0.0.1:8765"
+  [[ $(env_get WATCHDOG_PUBLIC_URL) == https://* ]] || set_env WATCHDOG_PUBLIC_URL "http://127.0.0.1:8790"
 fi
 
 mkdir -p secrets ntfy

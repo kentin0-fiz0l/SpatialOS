@@ -123,8 +123,10 @@ class ApprovalBroker:
         ]
 
 
-def build_app(broker: ApprovalBroker, untrusted_sources: list[str]) -> web.Application:
-    """HTTP endpoint the human's phone hits. Refuses callers from agent networks."""
+def build_app(broker: ApprovalBroker, untrusted_sources: list[str], audit=None) -> web.Application:
+    """HTTP endpoint the human's phone hits. Refuses callers from agent networks.
+
+    `audit` (an AuditLog) enables GET /activity, the read-only feed for dashboards."""
     networks = [ipaddress.ip_network(cidr) for cidr in untrusted_sources]
 
     @web.middleware
@@ -150,10 +152,20 @@ def build_app(broker: ApprovalBroker, untrusted_sources: list[str]) -> web.Appli
     async def healthz(_: web.Request) -> web.Response:
         return web.json_response({"ok": True})
 
+    async def activity(request: web.Request) -> web.Response:
+        if audit is None:
+            raise web.HTTPNotFound(text="no audit log configured")
+        try:
+            limit = max(1, min(int(request.query.get("limit", "50")), 500))
+        except ValueError:
+            raise web.HTTPBadRequest(text="limit must be an integer")
+        return web.json_response({"activity": audit.tail(limit), "pending": broker.pending()})
+
     app = web.Application(middlewares=[reject_agents])
     app.add_routes([
         web.post("/decide/{id}", decide),
         web.get("/pending", pending),
+        web.get("/activity", activity),
         web.get("/healthz", healthz),
     ])
     return app

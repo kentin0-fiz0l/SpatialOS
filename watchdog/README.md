@@ -8,7 +8,7 @@ The model never sees the approval channel, so a prompt-injected agent can't appr
 agent container ──(internal net, no route out)──► watchdog :8080 ──► internet
                                                       │
                                     ntfy push ◄───────┤ ask
-                       phone taps Approve ──► :8765 /decide/{id}?token=…
+                       phone taps Approve ──► :8790 /decide/{id}?token=…
 ```
 
 ## Run locally
@@ -120,6 +120,8 @@ rather than forwarded with the placeholder.
 # in watchdog/.env (gitignored), then: docker compose up -d
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+The approval server listens on **8790** (not 8765, which the SpatialOS MCP voice bridge uses).
 
 ## Known gaps
 
