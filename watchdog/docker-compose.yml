@@ -12,9 +12,11 @@ services:
       - ./watchdog.yaml:/config/watchdog.yaml:ro
       - ./devices.yaml:/config/devices.yaml:ro
       - ./data:/app/data
-      - ./certs:/certs            # mitmproxy CA (generated on first start)
+      - ./certs:/certs            # mitmproxy CA + key (generated on first start); never mounted into agents
+      - ./certs-public:/certs-public   # the CA certificate alone, copied here for agents
     environment:
       NTFY_TOKEN: ${NTFY_TOKEN:-}
+      WATCHDOG_CERT_PUBLISH_DIR: /certs-public
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}   # injected into agents' Claude API calls; agents never see it
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}   # only for keys not scoped to a workspace
       WATCHDOG_PUBLIC_URL: ${WATCHDOG_PUBLIC_URL:-http://127.0.0.1:8765}
@@ -73,7 +75,7 @@ services:
       # Trust the watchdog CA. Python: REQUESTS_CA_BUNDLE / SSL_CERT_FILE, Node: NODE_EXTRA_CA_CERTS.
       CURL_CA_BUNDLE: /certs/mitmproxy-ca-cert.pem
     volumes:
-      - ./certs/mitmproxy-ca-cert.pem:/certs/mitmproxy-ca-cert.pem:ro   # public cert only, not the CA key
+      - ./certs-public:/certs:ro   # a directory mount: safe on a fresh clone, unlike a single-file mount
     networks:
       agents:
         ipv4_address: 172.30.0.10
@@ -91,11 +93,12 @@ services:
       http_proxy: http://172.30.0.2:8080
       https_proxy: http://172.30.0.2:8080
       SSL_CERT_FILE: /certs/mitmproxy-ca-cert.pem
+      REQUESTS_CA_BUNDLE: /certs/mitmproxy-ca-cert.pem
       ANTHROPIC_API_KEY: injected-by-watchdog   # placeholder; the watchdog swaps in the real key
       AGENT_CONTACT: ${AGENT_CONTACT:-}   # optional, e.g. "mailto:you@example.com"; some sites ask bots for one
     volumes:
-      - ./certs/mitmproxy-ca-cert.pem:/certs/mitmproxy-ca-cert.pem:ro
-      - ../agent/workspace:/workspace
+      - ./certs-public:/certs:ro
+      - ../agent/workspace:/workspace   # exists in the clone (.gitkeep), owned by you; agent runs as uid 1000
       - ./devices.yaml:/config/devices.yaml:ro
     networks:
       agents:

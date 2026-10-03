@@ -17,6 +17,7 @@ echo " 6 direct to approval server:           $(S --noproxy '*' http://172.30.0.
 echo " 7 approvals via proxy, localhost:      $(SP http://localhost:8765/pending)"
 echo " 8 approvals via proxy, 127.0.0.1:      $(SP http://127.0.0.1:8765/pending)"
 echo " 9 approvals via proxy, 0x7f.1:         $(SP http://0x7f.1:8765/pending)"
+echo " 9b approvals via proxy, ::ffff:127.0.0.1: $(SP 'http://[::ffff:127.0.0.1]:8765/pending')"
 echo "10 approvals via proxy, localtest.me:   $(SP http://localtest.me:8765/pending)  (public DNS -> 127.0.0.1)"
 echo "11 approvals via proxy, 172.30.0.2:     $(SP http://172.30.0.2:8765/pending)"
 echo "12 cloud metadata 169.254.169.254:      $(SP http://169.254.169.254/latest/meta-data/)"

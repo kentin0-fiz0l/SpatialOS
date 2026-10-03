@@ -7,3 +7,4 @@ certs/
 ntfy/
 secrets/
 devices.yaml
+certs-public/

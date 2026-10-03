@@ -12,6 +12,14 @@ from addon import DEFAULT_BLOCKED_DESTINATIONS, Watchdog
 PUBLIC = "93.184.215.14"
 
 
+class RecordingAudit:
+    def __init__(self):
+        self.rows = []
+
+    def write(self, ctx, verdict):
+        self.rows.append((ctx, verdict))
+
+
 def answer(*ips):
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in ips]
 
@@ -20,6 +28,7 @@ def watchdog(*answers):
     """Watchdog whose resolver returns each answer in turn, like a rebinding DNS server."""
     wd = Watchdog()
     wd.blocked_destinations = [ipaddress.ip_network(c) for c in DEFAULT_BLOCKED_DESTINATIONS]
+    wd.audit = RecordingAudit()
     queue = list(answers)
 
     async def fake_getaddrinfo(host, port, **kwargs):
@@ -83,3 +92,19 @@ def test_any_blocked_answer_blocks_the_name():
 def test_resolution_failure_blocks():
     server = connect(watchdog(OSError("nxdomain")), "missing.example")
     assert "could not resolve" in server.error
+
+
+def test_ipv4_mapped_ipv6_is_checked_as_ipv4():
+    mapped = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::ffff:127.0.0.1", 0, 0, 0))]
+    wd = watchdog(mapped)
+    server = connect(wd, "sneaky.example", 8765)
+    assert "127.0.0.1" in server.error
+
+
+def test_connect_time_block_is_audited_and_marked():
+    wd = watchdog(answer("127.0.0.1"))
+    wd.agents = {"127.0.0.1": "scout"}
+    server = connect(wd, "evil.example", 80)
+    assert server.error.startswith("blocked_by_watchdog:")
+    (ctx, verdict), = wd.audit.rows
+    assert ctx.method == "CONNECT" and ctx.host == "evil.example" and verdict.decision.value == "deny"

@@ -48,3 +48,7 @@ def test_missing_fields_named():
         load_devices([{"name": "x"}])
     with pytest.raises(ValueError, match="credential missing 'env'"):
         load_devices([{"host": "10.0.0.1", "credential": {"header": "h"}}])
+
+
+def test_tailnet_addresses_count_as_lan():
+    assert "not in the device inventory" in INV.blocks(ip("100.101.102.103"))

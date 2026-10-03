@@ -90,6 +90,39 @@ def _html_to_text(html: str) -> str:
     return re.sub(r"\n\s*\n+", "\n\n", re.sub(r"[ \t]+", " ", "".join(parser.parts))).strip()
 
 
+class _Blocked(Exception):
+    """The watchdog refused the request; the message is its reason."""
+
+
+def _send(method: str, url: str, headers: dict[str, str] | None = None, body: str | None = None,
+          follow_redirects: bool = False) -> httpx2.Response:
+    """One path for every outbound request, so watchdog signals are read the same way everywhere."""
+    try:
+        with httpx2.Client(timeout=HTTP_TIMEOUT, follow_redirects=follow_redirects,
+                           headers={"User-Agent": USER_AGENT}) as http:
+            resp = http.request(method, url, headers=headers or {}, content=body)
+    except httpx2.ProxyError as e:
+        # A refused CONNECT: the watchdog blocked the tunnel itself (its reason is in the status line).
+        if "watchdog" in str(e).lower():
+            raise _Blocked("refused at connection time") from e
+        raise
+    if resp.headers.get("X-Watchdog-Decision") == "deny":
+        try:
+            reason = resp.json().get("reason", "no reason given")
+        except ValueError:
+            reason = resp.text[:200]
+        raise _Blocked(reason)
+    return resp
+
+
+def _describe(resp: httpx2.Response, method: str, url: str, text: str) -> str:
+    if len(text) > FETCH_CHARS:
+        text = text[:FETCH_CHARS] + f"\n\n[truncated at {FETCH_CHARS} characters]"
+    held = " (held by the watchdog and approved by the owner)" if resp.headers.get("X-Watchdog-Decision") == "approved" else ""
+    ctype = resp.headers.get("content-type", "")
+    return f"HTTP {resp.status_code} {method} {resp.url}{held}\nContent-Type: {ctype}\n\n{text}"
+
+
 @beta_tool
 def fetch_url(url: str) -> str:
     """Fetch a web page and return its text (HTML is converted to plain text).
@@ -98,20 +131,15 @@ def fetch_url(url: str) -> str:
         url: Absolute http(s) URL to fetch.
     """
     try:
-        with httpx2.Client(timeout=HTTP_TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as http:
-            resp = http.get(url)
+        resp = _send("GET", url, follow_redirects=True)
+    except _Blocked as e:
+        return f"Blocked by watchdog: {e}"
     except httpx2.HTTPError as e:
         return f"Error fetching {url}: {e}"
-    if resp.headers.get("X-Watchdog-Decision") == "deny":
-        reason = resp.json().get("reason", "no reason given")
-        return f"Blocked by watchdog: {reason}"
     body = resp.text
     if "html" in resp.headers.get("content-type", ""):
         body = _html_to_text(body)
-    note = ""
-    if len(body) > FETCH_CHARS:
-        body, note = body[:FETCH_CHARS], f"\n\n[truncated: page is longer than {FETCH_CHARS} characters]"
-    return f"HTTP {resp.status_code} {resp.url}\n\n{body}{note}"
+    return _describe(resp, "GET", url, body)
 
 
 @beta_tool
@@ -132,18 +160,12 @@ def http_request(method: str, url: str, headers: dict[str, str] | None = None, b
     if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
         return f"Error: unsupported method {method}"
     try:
-        with httpx2.Client(timeout=HTTP_TIMEOUT, follow_redirects=False, headers={"User-Agent": USER_AGENT}) as http:
-            resp = http.request(method, url, headers=headers or {}, content=body)
+        resp = _send(method, url, headers, body)
+    except _Blocked as e:
+        return f"Blocked by watchdog: {e}"
     except httpx2.HTTPError as e:
         return f"Error sending {method} {url}: {e}"
-    if resp.headers.get("X-Watchdog-Decision") == "deny":
-        return f"Blocked by watchdog: {resp.json().get('reason', 'no reason given')}"
-    text = resp.text
-    if len(text) > FETCH_CHARS:
-        text = text[:FETCH_CHARS] + f"\n\n[truncated at {FETCH_CHARS} characters]"
-    ctype = resp.headers.get("content-type", "")
-    held = " (held by the watchdog and approved by the owner)" if resp.headers.get("X-Watchdog-Decision") == "approved" else ""
-    return f"HTTP {resp.status_code} {method} {url}{held}\nContent-Type: {ctype}\n\n{text}"
+    return _describe(resp, method, url, resp.text)
 
 
 @beta_tool

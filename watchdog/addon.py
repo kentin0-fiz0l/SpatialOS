@@ -24,6 +24,7 @@ import ipaddress
 import json
 import logging
 import os
+import shutil
 import socket
 from urllib.parse import urlsplit
 
@@ -42,6 +43,7 @@ from watchdog_proxy.policy import Decision, Policy, RequestContext, Verdict, loa
 log = logging.getLogger("watchdog")
 
 SUMMARY_BODY_CHARS = 300
+BLOCK_MARKER = "blocked_by_watchdog"
 DEFAULT_BLOCKED_DESTINATIONS = ["127.0.0.0/8", "::1/128", "0.0.0.0/8", "169.254.0.0/16", "fe80::/10"]
 
 
@@ -90,12 +92,18 @@ class Watchdog:
         # Agents must never reach the approval server or the notification channel.
         self.protected = {h.lower() for h in cfg.get("protected_hosts", [])}
         pub = urlsplit(public_url)
-        self.protected.add(f"{pub.hostname}:{pub.port or 80}")
+        self.protected.add(f"{pub.hostname}:{pub.port or (443 if pub.scheme == 'https' else 80)}")
         if ntfy.get("url"):
             self.protected.add(urlsplit(ntfy["url"]).hostname.lower())
         self.blocked_destinations = [
             ipaddress.ip_network(c) for c in cfg.get("blocked_destinations", DEFAULT_BLOCKED_DESTINATIONS)
         ]
+
+        # Publish only the CA *certificate* for agents to trust; the key stays in confdir.
+        if public_dir := os.environ.get("WATCHDOG_CERT_PUBLISH_DIR"):
+            src = os.path.join(os.path.expanduser(mitm_ctx.options.confdir), "mitmproxy-ca-cert.pem")
+            os.makedirs(public_dir, exist_ok=True)
+            shutil.copyfile(src, os.path.join(public_dir, "mitmproxy-ca-cert.pem"))
 
         app = build_app(self.broker, appr.get("untrusted_sources", []))
         self._runner = web.AppRunner(app, access_log=None)  # access log would record approval tokens
@@ -137,7 +145,7 @@ class Watchdog:
             if verdict.decision is Decision.ASK:
                 approved, why = await self.broker.request(ctx, self._summarize(flow))
                 verdict = Verdict(Decision.ALLOW if approved else Decision.DENY, why, verdict.rule)
-                flow.metadata["watchdog_held"] = True
+                flow.metadata["watchdog_approved"] = approved
             # Secrets go in only after every gate and rule has passed.
             if verdict.decision is Decision.ALLOW and (missing := inject(req.headers, ctx, self.credentials, os.environ)):
                 verdict = Verdict(Decision.DENY, missing, verdict.rule)
@@ -155,8 +163,19 @@ class Watchdog:
 
     def response(self, flow: http.HTTPFlow):
         # Let the agent see that a human approved this one; a held request otherwise looks like a plain allow.
-        if flow.metadata.get("watchdog_held") and flow.response:
+        # (mitmproxy runs this hook for addon-made 403s too, hence the explicit approved check.)
+        if flow.metadata.get("watchdog_approved") and flow.response:
             flow.response.headers["X-Watchdog-Decision"] = "approved"
+
+    def http_connect_error(self, flow: http.HTTPFlow):
+        # A CONNECT tunnel refused by server_connect (rebinding caught at dial time). The client
+        # only sees the status line of a refused CONNECT, so put the verdict in the reason phrase.
+        if flow.response and BLOCK_MARKER in (flow.response.get_text(strict=False) or ""):
+            flow.response = http.Response.make(
+                403, json.dumps({"error": "blocked_by_watchdog", "reason": flow.response.get_text(strict=False)}),
+                {"Content-Type": "application/json", "X-Watchdog-Decision": "deny"},
+            )
+            flow.response.reason = "Blocked by watchdog"
 
     def _is_protected(self, host: str, port: int) -> bool:
         return host in self.protected or f"{host}:{port}" in self.protected
@@ -166,7 +185,11 @@ class Watchdog:
         host, port = data.server.address
         ip, reason = await self._resolve_allowed(host, port)
         if reason:
-            data.server.error = reason  # mitmproxy aborts before dialing
+            data.server.error = f"{BLOCK_MARKER}: {reason}"  # mitmproxy aborts before dialing
+            client_ip = data.client.peername[0] if data.client.peername else "?"
+            ctx = RequestContext(agent=self.agents.get(client_ip, f"unregistered:{client_ip}"),
+                                 method="CONNECT", host=host.lower(), path="")
+            self.audit.write(ctx, Verdict(Decision.DENY, f"at connect time: {reason}"))
             return
         if ip != host:
             data.server.sni = data.server.sni or host  # TLS must still verify the real hostname
@@ -187,7 +210,9 @@ class Watchdog:
             infos = await self._getaddrinfo(host, port, type=socket.SOCK_STREAM)
         except OSError as e:
             return None, f"could not resolve {host}: {e}"
+        # ::ffff:127.0.0.1 is 127.0.0.1 on a dual-stack socket; check it as the IPv4 it is.
         ips = [ipaddress.ip_address(sockaddr[0]) for *_, sockaddr in infos]
+        ips = [ip.ipv4_mapped or ip if ip.version == 6 else ip for ip in ips]
         for ip in ips:
             if any(ip in net for net in self.blocked_destinations):
                 return None, f"{host} resolves to blocked address {ip}"
