@@ -1,0 +1,10 @@
+.venv/
+data/
+watchdog.yaml
+__pycache__/
+certs/
+.env
+ntfy/
+secrets/
+devices.yaml
+certs-public/

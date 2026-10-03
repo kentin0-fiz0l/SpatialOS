@@ -1,0 +1,85 @@
+# Copy to watchdog.yaml and edit. watchdog.yaml is gitignored.
+
+# Client IP -> agent name. Each agent container gets a fixed IP (see docker-compose.yml).
+# Any client not listed here is denied everything.
+agents:
+  "127.0.0.1": local-dev
+  "172.30.0.10": scout
+  "172.30.0.11": researcher
+
+identity:
+  # Appended to User-Agent on allowed requests so sites can tell an agent is acting.
+  user_agent_suffix: "SpatialOS-Agent/0.1"
+
+approvals:
+  listen_host: 127.0.0.1
+  listen_port: 8765
+  # URL your phone uses to reach the approval server. WATCHDOG_PUBLIC_URL (in .env) overrides it.
+  public_url: http://127.0.0.1:8765
+  timeout_seconds: 300          # unanswered approvals are denied
+  untrusted_sources:            # callers the approval endpoint refuses (except /healthz)
+    - 172.30.0.0/24             # agent network
+    # - 127.0.0.0/8             # uncomment in Docker: inside the container, loopback callers are the proxy itself
+  ntfy:
+    url: ""                      # "http://ntfy" with docker compose ; empty = print to console
+    topic: watchdog-approvals
+    token_env: NTFY_TOKEN       # env var holding an ntfy access token, if your server needs one
+
+# Agents can never reach these, whatever the rules say. The approval server and ntfy host
+# are added automatically. Use "host" or "host:port".
+protected_hosts: []
+
+# Agents can't reach these addresses through the proxy, however the host is spelled
+# (localhost, 0x7f.1, or a DNS name pointing at them). Resolved at request time.
+blocked_destinations:
+  - 127.0.0.0/8       # loopback, including the watchdog's own services
+  - ::1/128
+  - 0.0.0.0/8
+  - 169.254.0.0/16    # link-local, incl. cloud metadata 169.254.169.254
+  - fe80::/10
+  - 172.30.0.0/24     # agent network: no agent-to-agent traffic through the proxy
+  - 172.31.0.0/24     # control network: ntfy (notifications carry approval tokens)
+
+# Secrets the watchdog adds to allowed requests. Agents send a placeholder and never hold
+# the real value. Values come from the watchdog's environment (watchdog/.env with Docker).
+credentials:
+  - hosts: [api.anthropic.com]
+    header: x-api-key
+    env: ANTHROPIC_API_KEY
+  # Only needed for keys not scoped to a workspace (the API then asks which one to bill).
+  - hosts: [api.anthropic.com]
+    header: anthropic-workspace-id
+    env: ANTHROPIC_WORKSPACE_ID
+    optional: true
+
+audit_log: data/audit.jsonl
+
+# First match wins. Fields take a glob or a list of globs; omitted fields match anything.
+rules:
+  # The agent's own brain.
+  - decision: allow
+    hosts: [api.anthropic.com]
+    methods: [POST]
+    paths: [/v1/messages]
+    reason: LLM calls
+
+  # Sending email is consequential.
+  - decision: ask
+    hosts: [gmail.googleapis.com]
+    paths: ["/gmail/v1/users/*/messages/send", "/gmail/v1/users/*/drafts/send"]
+    reason: sending email
+
+  - decision: allow
+    hosts: [gmail.googleapis.com]
+    methods: [GET]
+    reason: reading email
+
+  # Reference sites the research agent may browse freely.
+  - decision: allow
+    hosts: ["*.wikipedia.org", "docs.python.org", "developer.mozilla.org", "github.com", "*.githubusercontent.com"]
+    methods: [GET, HEAD]
+    reason: reference reading
+
+  - decision: deny
+    hosts: ["*.amazon.com", "*.paypal.com"]
+    reason: no shopping or payments yet
