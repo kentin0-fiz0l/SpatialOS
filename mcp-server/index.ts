@@ -9,6 +9,17 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  BROWSER_NOT_CONNECTED,
+  CLOSE_CODES,
+  isAllowedOrigin,
+  tokenMatches,
+  validateImageUrl,
+} from './lib.js';
 
 /**
  * SpatialOS MCP Server
@@ -24,6 +35,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 // WebSocket server for browser connection
 const WS_PORT = 8765;
+
+// The browser must present this token. It's written to a file the Vite dev server reads
+// and serves to the page (loopback only), so neither side needs configuration and a
+// restart of either just works. MCP_AUTH_TOKEN pins it; MCP_TOKEN_FILE moves the file.
+const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN || randomBytes(24).toString('base64url');
+const TOKEN_FILE =
+  process.env.MCP_TOKEN_FILE || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.mcp-token');
 let wsServer: WebSocketServer;
 let browserClient: WebSocket | null = null;
 
@@ -160,10 +178,12 @@ const TOOLS: Tool[] = [
 function sendToBrowser(command: any): Promise<any> {
   return new Promise((resolve, reject) => {
     if (!browserClient || browserClient.readyState !== WebSocket.OPEN) {
-      reject(new Error('Browser not connected. Please open the SpatialOS app in your browser.'));
+      reject(new Error(BROWSER_NOT_CONNECTED));
       return;
     }
 
+    // Capture socket reference to prevent listener leak on reconnect
+    const client = browserClient;
     const messageId = uuidv4();
     const message = {
       id: messageId,
@@ -172,7 +192,8 @@ function sendToBrowser(command: any): Promise<any> {
 
     // Wait for response
     const timeout = setTimeout(() => {
-      reject(new Error('Browser response timeout'));
+      client.removeListener('message', responseHandler);
+      reject(new Error('Browser not responding. Check the SpatialOS tab (http://localhost:5173) is open and not frozen, then try again.'));
     }, 5000);
 
     const responseHandler = (data: Buffer) => {
@@ -180,7 +201,7 @@ function sendToBrowser(command: any): Promise<any> {
         const response = JSON.parse(data.toString());
         if (response.id === messageId) {
           clearTimeout(timeout);
-          browserClient?.removeListener('message', responseHandler);
+          client.removeListener('message', responseHandler);
           if (response.error) {
             reject(new Error(response.error));
           } else {
@@ -192,22 +213,46 @@ function sendToBrowser(command: any): Promise<any> {
       }
     };
 
-    browserClient.on('message', responseHandler);
-    browserClient.send(JSON.stringify(message));
+    client.on('message', responseHandler);
+    client.send(JSON.stringify(message));
   });
 }
 
 // Initialize WebSocket server
 function initWebSocketServer() {
-  wsServer = new WebSocketServer({ port: WS_PORT });
+  wsServer = new WebSocketServer({ port: WS_PORT, host: 'localhost' });
 
-  wsServer.on('connection', (ws) => {
-    console.error(`[MCP] Browser connected to WebSocket on port ${WS_PORT}`);
+  wsServer.on('connection', (ws, req) => {
+    // Only pages served from this machine may connect (browsers can't forge Origin).
+    const origin = req.headers.origin;
+    if (!isAllowedOrigin(origin)) {
+      console.error(`[MCP] Rejected connection from unauthorized origin: ${origin}`);
+      ws.close(CLOSE_CODES.UNAUTHORIZED, 'Unauthorized origin');
+      return;
+    }
+
+    const url = new URL(req.url || '', `http://localhost:${WS_PORT}`);
+    if (!tokenMatches(url.searchParams.get('token'), AUTH_TOKEN)) {
+      console.error('[MCP] Rejected connection with invalid token');
+      ws.close(CLOSE_CODES.UNAUTHORIZED, 'Invalid auth token');
+      return;
+    }
+
+    // One browser drives the scene. A distinct close code tells the old tab not to
+    // reconnect; with a normal close the two tabs would evict each other every 2s.
+    if (browserClient && browserClient.readyState === WebSocket.OPEN) {
+      console.error('[MCP] Another tab connected; closing the previous one');
+      browserClient.close(CLOSE_CODES.SUPERSEDED, 'Another SpatialOS tab took over');
+    }
+
+    console.error(`[MCP] Browser authenticated and connected`);
     browserClient = ws;
 
     ws.on('close', () => {
       console.error('[MCP] Browser disconnected');
-      browserClient = null;
+      if (browserClient === ws) {
+        browserClient = null;
+      }
     });
 
     ws.on('error', (err) => {
@@ -215,7 +260,20 @@ function initWebSocketServer() {
     });
   });
 
-  console.error(`[MCP] WebSocket server listening on ws://localhost:${WS_PORT}`);
+  wsServer.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[MCP] Port ${WS_PORT} is already in use. Please close any other instances of the MCP server or restart your system.`);
+    } else {
+      console.error('[MCP] WebSocket server error:', err.message || err);
+    }
+    process.exit(1);
+  });
+
+  // The token never goes to the log (voice-harness captures stderr). The file is how
+  // the browser learns it; see the mcpToken plugin in vite.config.ts.
+  mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
+  writeFileSync(TOKEN_FILE, AUTH_TOKEN, { mode: 0o600 });
+  console.error(`[MCP] WebSocket server listening on ws://localhost:${WS_PORT}; token in ${TOKEN_FILE}`);
 }
 
 // Initialize MCP server
@@ -292,6 +350,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'create_spatial_image': {
         const url = (args as any).url as string;
+        validateImageUrl(url); // Prevent javascript:, file:, etc.
         const result = await sendToBrowser({
           type: 'createObject',
           objectType: 'image',

@@ -288,7 +288,7 @@ interface SpatialObject {
 
 ## Connection
 
-**WebSocket URL:** `ws://localhost:8765`
+**WebSocket URL:** `ws://localhost:8765?token=<token>` — the token comes from `GET /mcp-token` on the Vite dev server (loopback only); see `mcp-server/README.md`.
 
 **Message Format:**
 ```json
